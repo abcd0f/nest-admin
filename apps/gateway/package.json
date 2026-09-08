@@ -1,10 +1,10 @@
 {
   "name": "@w/gateway",
+  "type": "module",
   "version": "0.0.1",
+  "private": true,
   "description": "",
   "author": "",
-  "private": true,
-  "type": "module",
   "scripts": {
     "build": "nest build",
     "start": "NODE_ENV=development nest start",
