@@ -4,3 +4,7 @@ enablePrePostScripts: true
 strictPeerDependencies: true
 
 registry: https://registry.npmmirror.com
+
+packages:
+  - 'packages/*'
+  - 'apps/*'
