@@ -6,4 +6,5 @@ async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter());
   await app.listen(process.env.PORT ?? 4000, '0.0.0.0');
 }
-await bootstrap();
+
+bootstrap();

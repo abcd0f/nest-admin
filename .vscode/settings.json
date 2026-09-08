@@ -9,8 +9,7 @@
     "javascript",
     "typescript",
     "json",
-    "jsonc",
-    "yaml"
+    "jsonc"
   ],
   "editor.codeActionsOnSave": {
     "source.fixAll.oxc": "explicit",

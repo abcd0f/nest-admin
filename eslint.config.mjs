@@ -39,15 +39,8 @@ export default antfu(
       'pnpm/json-enforce-catalog': 'error',
       'pnpm/json-valid-catalog': 'error',
       'pnpm/json-prefer-workspace-settings': 'error',
-    },
-  },
-  {
-    files: ['pnpm-workspace.yaml'],
-    rules: {
-      'antfu/pnpm/pnpm-workspace-yaml-sort': 'error',
       'pnpm/yaml-no-unused-catalog-item': 'error',
       'pnpm/yaml-no-duplicate-catalog-item': 'error',
-      'pnpm/yaml-valid-packages': 'error',
     },
   },
 );

@@ -1,0 +1,11 @@
+{
+  "name": "@w/core",
+  "type": "module",
+  "version": "0.0.1",
+  "private": true,
+  "description": "",
+  "author": "",
+  "scripts": {},
+  "dependencies": {},
+  "devDependencies": {}
+}
