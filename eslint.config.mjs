@@ -43,4 +43,12 @@ export default antfu(
       'pnpm/yaml-no-duplicate-catalog-item': 'error',
     },
   },
+  {
+    files: ['**/pnpm-workspace.yaml'],
+    rules: {
+      'yaml/sort-keys': 'error',
+      'yaml/indent': ['error', 2],
+      'yaml/quotes': ['error', 'single'],
+    },
+  },
 );

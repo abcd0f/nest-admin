@@ -6,6 +6,11 @@
   "description": "",
   "author": "",
   "scripts": {},
-  "dependencies": {},
-  "devDependencies": {}
+  "dependencies": {
+    "@prisma/adapter-mariadb": "catalog:",
+    "@prisma/client": "catalog:"
+  },
+  "devDependencies": {
+    "prisma": "catalog:"
+  }
 }

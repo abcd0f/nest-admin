@@ -27,6 +27,12 @@ catalogs:
     '@nestjs/testing':
       specifier: ^12.0.1
       version: 12.0.1
+    '@prisma/adapter-mariadb':
+      specifier: ^7.10.0
+      version: 7.10.0
+    '@prisma/client':
+      specifier: ^7.10.0
+      version: 7.10.0
     '@types/node':
       specifier: ^24.0.0
       version: 24.13.3
@@ -42,6 +48,9 @@ catalogs:
     prettier:
       specifier: ^3.4.2
       version: 3.9.6
+    prisma:
+      specifier: ^7.10.0
+      version: 7.10.0
     reflect-metadata:
       specifier: ^0.2.2
       version: 0.2.2
@@ -158,7 +167,18 @@ importers:
 
   packages/core: {}
 
-  packages/database: {}
+  packages/database:
+    dependencies:
+      '@prisma/adapter-mariadb':
+        specifier: 'catalog:'
+        version: 7.10.0
+      '@prisma/client':
+        specifier: 'catalog:'
+        version: 7.10.0(prisma@7.10.0(@types/react@19.2.18)(magicast@0.5.4)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@6.0.3))(typescript@6.0.3)
+    devDependencies:
+      prisma:
+        specifier: 'catalog:'
+        version: 7.10.0(@types/react@19.2.18)(magicast@0.5.4)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@6.0.3)
 
   packages/logger: {}
 
