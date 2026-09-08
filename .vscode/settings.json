@@ -4,6 +4,14 @@
   "[prisma]": {
     "editor.defaultFormatter": "Prisma.prisma"
   },
+  "editor.formatOnSave": false,
+  "eslint.validate": [
+    "javascript",
+    "typescript",
+    "json",
+    "jsonc",
+    "yaml"
+  ],
   "editor.codeActionsOnSave": {
     "source.fixAll.oxc": "explicit",
     "source.fixAll.eslint": "explicit",
@@ -34,7 +42,7 @@
     "*.env": "$(capture).env.*",
     "README.md": "README*,CHANGELOG*,LICENSE,CNAME",
     "package.json": "pnpm-lock.yaml,pnpm-workspace.yaml,.gitignore,.npmrc,.node-version,.git*",
-    "oxlint.config.ts": ".eslintignore,.prettierignore,.prettierrc,.editorconfig,nest-cli.json,ecosystem.config.js",
+    "eslint.config.mjs": ".eslintignore,.prettierignore,.prettierrc,.editorconfig,nest-cli.json,ecosystem.config.js",
     "vitest.config.ts": "vitest.config.e2e.ts"
   }
 }
