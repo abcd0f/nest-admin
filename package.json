@@ -22,6 +22,7 @@
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
     "test:e2e": "vitest run --config ./vitest.config.e2e.ts"
   },
+  "dependencies": {},
   "devDependencies": {
     "@antfu/eslint-config": "catalog:",
     "@nestjs/cli": "catalog:",
@@ -35,16 +36,11 @@
     "@vitest/coverage-v8": "catalog:",
     "eslint": "catalog:",
     "prettier": "catalog:",
-    "prisma": "^7.10.0",
     "reflect-metadata": "catalog:",
     "rxjs": "catalog:",
     "source-map-support": "catalog:",
     "supertest": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
-  },
-  "dependencies": {
-    "@prisma/adapter-mariadb": "^7.10.0",
-    "@prisma/client": "^7.10.0"
   }
 }

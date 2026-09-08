@@ -41,6 +41,7 @@ export default antfu(
       'pnpm/json-prefer-workspace-settings': 'error',
       'pnpm/yaml-no-unused-catalog-item': 'error',
       'pnpm/yaml-no-duplicate-catalog-item': 'error',
+
     },
   },
   {
@@ -48,7 +49,11 @@ export default antfu(
     rules: {
       'yaml/sort-keys': 'error',
       'yaml/indent': ['error', 2],
-      'yaml/quotes': ['error', 'single'],
+      'yaml/quotes': [
+        'error',
+        { prefer: 'single' },
+      ],
+      'pnpm/yaml-enforce-settings': 'off',
     },
   },
 );
