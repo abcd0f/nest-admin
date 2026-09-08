@@ -1,0 +1,6 @@
+shellEmulator: true
+shamefullyHoist: true
+enablePrePostScripts: true
+strictPeerDependencies: true
+
+registry: https://registry.npmmirror.com
