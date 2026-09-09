@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 
-import { aaa } from '@w/common';
+import { aaa } from '../../../packages/common/src/index.js';
 
 @Injectable()
 export class AppService {
