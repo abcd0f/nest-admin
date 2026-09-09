@@ -1,1 +1,1 @@
-export {};
+export * from './pino.logger.js';

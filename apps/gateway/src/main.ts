@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { fastifyApp, setFastifyApp } from '../../../packages/common/src/index.js';
+import { PinoLogger } from '../../../packages/logger/src/index.js';
 import { getCorsOption, getLocalIPs } from '../../../packages/utils/src/index.js';
 
 import { AppModule } from './app.module.js';
@@ -15,46 +16,53 @@ async function bootstrap() {
   setFastifyApp(fastifyApp);
 
   const config = app.get(ConfigService<ConfigKeyPaths, true>);
-  const { port, prefix } = config.get('app', { infer: true });
+  const { port, prefix, logger } = config.get('app', { infer: true });
 
   app.setGlobalPrefix(prefix);
   app.enableCors(getCorsOption());
+
+    const pinoLogger = new PinoLogger({
+    level: logger.level as any,
+    logDir: logger.dir,
+    enableConsole: logger.showConsole,
+  });
+  app.useLogger(pinoLogger);
 
   setupSwagger(app);
 
   await app.listen(port, '0.0.0.0');
 
-  setupGracefulShutdown(app);
+  setupGracefulShutdown(app, pinoLogger);
 
   const localIPs = getLocalIPs();
 
-  console.log(`\n🟢 启动成功:`);
-  console.log(`\n📍 本地访问: http://localhost:${port}`);
-  console.log(`📖 API 文档: http://localhost:${port}/api`);
+  pinoLogger.log('🟢 启动成功', 'Bootstrap');
+  pinoLogger.log(`📍 本地访问: http://localhost:${port}`, 'Bootstrap');
+  pinoLogger.log(`📖 API 文档: http://localhost:${port}/api`, 'Bootstrap');
 
   if (localIPs.length > 0) {
-    console.log(`\n🌐 网络访问:`);
+    pinoLogger.log('🌐 网络访问:', 'Bootstrap');
     localIPs.forEach((ip) => {
-      console.log(`   http://${ip}:${port}`);
-      console.log(`   http://${ip}:${port}/api`);
+      pinoLogger.log(`   http://${ip}:${port}`, 'Bootstrap');
+      pinoLogger.log(`   http://${ip}:${port}/api`, 'Bootstrap');
     });
   } else {
-    console.log(`\n⚠️  未检测到可用网络接口`);
+    pinoLogger.warn('未检测到可用网络接口', 'Bootstrap');
   }
 }
 
-function setupGracefulShutdown(app: NestFastifyApplication) {
+function setupGracefulShutdown(app: NestFastifyApplication, logger: PinoLogger) {
   const signals: NodeJS.Signals[] = ['SIGTERM', 'SIGINT'];
 
   signals.forEach((signal) => {
     process.on(signal, async () => {
-      console.log(`\n收到 ${signal} 信号，开始优雅关闭...`);
+      logger.log(`收到 ${signal} 信号，开始优雅关闭...`, 'Shutdown');
       try {
         await app.close();
-        console.log('应用已安全关闭');
+        logger.log('应用已安全关闭', 'Shutdown');
         process.exit(0);
       } catch (error) {
-        console.error('关闭过程出错:', error);
+        logger.error('关闭过程出错', error instanceof Error ? error.stack : String(error), 'Shutdown');
         process.exit(1);
       }
     });
@@ -62,6 +70,7 @@ function setupGracefulShutdown(app: NestFastifyApplication) {
 }
 
 bootstrap().catch((error) => {
-  console.error('应用启动失败:', error);
+  const errorMessage = error instanceof Error ? error.stack : String(error);
+  console.error(`应用启动失败: ${errorMessage}`);
   process.exit(1);
 });
