@@ -32,37 +32,48 @@ async function bootstrap() {
 
   await app.listen(port, '0.0.0.0');
 
-  setupGracefulShutdown(app, pinoLogger);
+  setupGracefulShutdown(app);
 
   const localIPs = getLocalIPs();
+  const swaggerConfig = config.get('swagger', { infer: true });
 
-  pinoLogger.log('🟢 启动成功', 'Bootstrap');
-  pinoLogger.log(`📍 本地访问: http://localhost:${port}`, 'Bootstrap');
-  pinoLogger.log(`📖 API 文档: http://localhost:${port}/api`, 'Bootstrap');
+  console.log('\n');
+  console.log('🟢 启动成功');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log(`📍 本地访问:`);
+  console.log(`   http://localhost:${port}${prefix}`);
+  if (swaggerConfig.enable) {
+    console.log(`📖 API 文档:`);
+    console.log(`   http://localhost:${port}/${swaggerConfig.path}`);
+  }
 
   if (localIPs.length > 0) {
-    pinoLogger.log('🌐 网络访问:', 'Bootstrap');
+    console.log(`🌐 网络访问:`);
     localIPs.forEach((ip) => {
-      pinoLogger.log(`   http://${ip}:${port}`, 'Bootstrap');
-      pinoLogger.log(`   http://${ip}:${port}/api`, 'Bootstrap');
+      console.log(`   http://${ip}:${port}${prefix}`);
+      if (swaggerConfig.enable) {
+        console.log(`   http://${ip}:${port}/${swaggerConfig.path}`);
+      }
     });
   } else {
-    pinoLogger.warn('未检测到可用网络接口', 'Bootstrap');
+    console.log(`⚠️  未检测到可用网络接口`);
   }
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('\n');
 }
 
-function setupGracefulShutdown(app: NestFastifyApplication, logger: PinoLogger) {
+function setupGracefulShutdown(app: NestFastifyApplication) {
   const signals: NodeJS.Signals[] = ['SIGTERM', 'SIGINT'];
 
   signals.forEach((signal) => {
     process.on(signal, async () => {
-      logger.log(`收到 ${signal} 信号，开始优雅关闭...`, 'Shutdown');
+      console.log(`收到 ${signal} 信号，开始优雅关闭...`, 'Shutdown');
       try {
         await app.close();
-        logger.log('应用已安全关闭', 'Shutdown');
+        console.log('应用已安全关闭', 'Shutdown');
         process.exit(0);
       } catch (error) {
-        logger.error('关闭过程出错', error instanceof Error ? error.stack : String(error), 'Shutdown');
+        console.error('关闭过程出错', error instanceof Error ? error.stack : String(error), 'Shutdown');
         process.exit(1);
       }
     });
