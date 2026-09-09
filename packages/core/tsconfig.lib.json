@@ -1,9 +1,8 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "rootDir": ".",
     "declaration": true,
-    "outDir": "../../dist/apps/gateway"
+    "outDir": "../../dist/packages/core"
   },
   "include": ["src/**/*"]
 }

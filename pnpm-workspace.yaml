@@ -5,33 +5,6 @@ shamefullyHoist: true
 enablePrePostScripts: true
 shellEmulator: true
 
-packages:
-  - 'packages/*'
-  - 'apps/*'
-
 allowBuilds:
   '@prisma/engines': true
   prisma: true
-
-catalog:
-  '@antfu/eslint-config': ^9.5.1
-  '@nestjs/cli': ^12.0.0
-  '@nestjs/common': ^12.0.1
-  '@nestjs/core': ^12.0.1
-  '@nestjs/platform-fastify': ^12.0.1
-  '@nestjs/schematics': ^12.0.0
-  '@nestjs/testing': ^12.0.1
-  '@prisma/adapter-mariadb': ^7.10.0
-  '@prisma/client': ^7.10.0
-  '@types/node': ^24.0.0
-  '@types/supertest': ^7.0.0
-  '@vitest/coverage-v8': ^4.1.2
-  eslint: ^10.10.0
-  prettier: ^3.4.2
-  prisma: ^7.10.0
-  reflect-metadata: ^0.2.2
-  rxjs: ^7.8.1
-  source-map-support: ^0.5.21
-  supertest: ^7.0.0
-  typescript: ^6.0.2
-  vitest: ^4.1.2

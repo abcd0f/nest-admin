@@ -27,6 +27,51 @@
       "compilerOptions": {
         "tsConfigPath": "apps/gateway/tsconfig.json"
       }
+    },
+    "common": {
+      "type": "library",
+      "root": "packages/common",
+      "entryFile": "index",
+      "sourceRoot": "packages/common/src",
+      "compilerOptions": {
+        "tsConfigPath": "packages/common/tsconfig.lib.json"
+      }
+    },
+    "config": {
+      "type": "library",
+      "root": "packages/config",
+      "entryFile": "index",
+      "sourceRoot": "packages/config/src",
+      "compilerOptions": {
+        "tsConfigPath": "packages/config/tsconfig.lib.json"
+      }
+    },
+    "core": {
+      "type": "library",
+      "root": "packages/core",
+      "entryFile": "index",
+      "sourceRoot": "packages/core/src",
+      "compilerOptions": {
+        "tsConfigPath": "packages/core/tsconfig.lib.json"
+      }
+    },
+    "database": {
+      "type": "library",
+      "root": "packages/database",
+      "entryFile": "index",
+      "sourceRoot": "packages/database/src",
+      "compilerOptions": {
+        "tsConfigPath": "packages/database/tsconfig.lib.json"
+      }
+    },
+    "utils": {
+      "type": "library",
+      "root": "packages/utils",
+      "entryFile": "index",
+      "sourceRoot": "packages/utils/src",
+      "compilerOptions": {
+        "tsConfigPath": "packages/utils/tsconfig.lib.json"
+      }
     }
   }
 }

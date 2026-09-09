@@ -31,28 +31,6 @@ export default antfu(
       'style/indent': 'off',
       'style/operator-linebreak': 'off',
       'antfu/if-newline': 'off',
-    },
-  },
-  {
-    files: ['**/package.json'],
-    rules: {
-      'pnpm/json-enforce-catalog': 'error',
-      'pnpm/json-valid-catalog': 'error',
-      'pnpm/json-prefer-workspace-settings': 'error',
-      'pnpm/yaml-no-unused-catalog-item': 'error',
-      'pnpm/yaml-no-duplicate-catalog-item': 'error',
-
-    },
-  },
-  {
-    files: ['**/pnpm-workspace.yaml'],
-    rules: {
-      'yaml/sort-keys': 'error',
-      'yaml/indent': ['error', 2],
-      'yaml/quotes': [
-        'error',
-        { prefer: 'single' },
-      ],
       'pnpm/yaml-enforce-settings': 'off',
     },
   },
