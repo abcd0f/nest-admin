@@ -13,6 +13,11 @@ export const AppConfig = registerAs(appRegToken, () => ({
     dir: env('LOGGER_DIR'),
     showConsole: envBoolean('LOGGER_CONSOLE'),
   },
+  swagger: {
+    enable: envBoolean('SWAGGER_ENABLE', true),
+    path: env('SWAGGER_PATH', 'api'),
+    version: env('SWAGGER_VERSION', '1.0'),
+  },
 }));
 
 export type IAppConfig = ConfigType<typeof AppConfig>;
