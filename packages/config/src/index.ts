@@ -1,9 +1,12 @@
 import { AppConfig, appRegToken, IAppConfig } from './app.config.js';
+import { ISwaggerConfig, SwaggerConfig, swaggerRegToken } from './swagger.config.js';
 
 export * from './app.config.js';
+export * from './swagger.config.js';
 
 export interface AllConfigType {
   [appRegToken]: IAppConfig;
+  [swaggerRegToken]: ISwaggerConfig;
 }
 
 type PropType<T, Path extends string> = string extends Path
@@ -30,4 +33,5 @@ export type ConfigKeyPaths = RecordNamePaths<AllConfigType>;
 
 export default {
   AppConfig,
+  SwaggerConfig,
 };
