@@ -1,5 +1,4 @@
-minimumReleaseAgeExcludePrune: true
-strictPeerDependencies: true
+strictPeerDependencies: false
 registry: https://registry.npmmirror.com
 shamefullyHoist: true
 enablePrePostScripts: true
@@ -7,4 +6,5 @@ shellEmulator: true
 
 allowBuilds:
   '@prisma/engines': true
+  '@scarf/scarf': true
   prisma: true
