@@ -1,11 +1,14 @@
 import { AppConfig, appRegToken, IAppConfig } from './app.config.js';
+import { DatabaseConfig, databaseRegToken, IDatabaseConfig } from './database.config.js';
 import { ISwaggerConfig, SwaggerConfig, swaggerRegToken } from './swagger.config.js';
 
 export * from './app.config.js';
+export * from './database.config.js';
 export * from './swagger.config.js';
 
 export interface AllConfigType {
   [appRegToken]: IAppConfig;
+  [databaseRegToken]: IDatabaseConfig;
   [swaggerRegToken]: ISwaggerConfig;
 }
 
@@ -33,5 +36,6 @@ export type ConfigKeyPaths = RecordNamePaths<AllConfigType>;
 
 export default {
   AppConfig,
+  DatabaseConfig,
   SwaggerConfig,
 };
