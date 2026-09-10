@@ -81,21 +81,10 @@ function createPinoLogger(options: PinoLoggerOptions = {}): pino.Logger {
   ];
 
   if (showConsole) {
-    if (isDev) {
-      streams.unshift({
-        level: level as pino.Level,
-        stream: pino.transport({
-          target: 'pino-pretty',
-          options: {
-            colorize: true,
-            translateTime: 'SYS:standard',
-            ignore: 'pid,hostname',
-          },
-        }),
-      });
-    } else {
-      streams.unshift({ level: 'info' as pino.Level, stream: process.stdout });
-    }
+    streams.unshift({
+      level: (isDev ? level : 'info') as pino.Level,
+      stream: process.stdout,
+    });
   }
 
   return pino(baseOptions, pino.multistream(streams));
