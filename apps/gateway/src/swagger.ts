@@ -1,5 +1,5 @@
+import type { ConfigKeyPaths } from '@libs/config';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
-import type { ConfigKeyPaths } from '../../../packages/config/src/index.js';
 
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';

@@ -1,7 +1,8 @@
+import config from '@libs/config';
+import { PrismaModule } from '@libs/database';
+
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import config from '../../../packages/config/src/index.js';
-import { PrismaModule } from '../../../packages/database/src/index.js';
 import { AppController } from './app.controller.js';
 
 import { AppService } from './app.service.js';

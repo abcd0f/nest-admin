@@ -1,11 +1,11 @@
-import type { ConfigKeyPaths } from '../../../packages/config/src/index.js';
+import type { ConfigKeyPaths } from '@libs/config';
 
+import { fastifyApp, setFastifyApp } from '@libs/common';
+import { PinoLogger } from '@libs/logger';
+import { getCorsOption, getLocalIPs } from '@libs/utils';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
-import { fastifyApp, setFastifyApp } from '../../../packages/common/src/index.js';
-import { PinoLogger } from '../../../packages/logger/src/index.js';
-import { getCorsOption, getLocalIPs } from '../../../packages/utils/src/index.js';
 
 import { AppModule } from './app.module.js';
 import { setupSwagger } from './swagger.js';
