@@ -7,3 +7,8 @@
 
 app:
   port: 80
+
+logger:
+  console:
+    # 生产环境默认使用 JSON，便于日志平台采集；可覆盖为 true 开启彩色
+    pretty: false

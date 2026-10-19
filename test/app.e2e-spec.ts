@@ -1,29 +1,145 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
-import request from 'supertest';
-import { App } from 'supertest/types';
-import { AppModule } from './../src/app.module.js';
+import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { setImmediate } from 'node:timers/promises';
+import { loggerConfig } from '@app/config';
+import { AllExceptionsFilter } from '@app/core';
+import { LoggerService, PinoLogger } from '@app/logger';
+import { BadRequestException, ConsoleLogger, Controller, Get, Inject, Logger, Post, Req } from '@nestjs/common';
+import { HttpAdapterHost } from '@nestjs/core';
+import { FastifyAdapter } from '@nestjs/platform-fastify';
+import { Test } from '@nestjs/testing';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { AppController } from '../apps/gateway/src/app.controller.js';
+import { AppModule } from '../apps/gateway/src/app.module.js';
+import { AppService } from '../apps/gateway/src/app.service.js';
+import { loggerDomain } from '../libs/config/src/domains/logger.domain.js';
 
-describe('AppController (e2e)', () => {
-  let app: INestApplication<App>;
+@Controller('log-probe')
+class LogProbeController {
+  constructor(@Inject(PinoLogger) private readonly logger: PinoLogger) {}
 
-  beforeEach(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
+  @Post('ok')
+  async ok(@Req() request: { id: string }) {
+    await setImmediate();
+    this.logger.info({ password: 'business-secret' }, 'probe-business');
+    new Logger('ProbeService').log('probe-nest');
+    return { id: request.id };
+  }
 
-    app = moduleFixture.createNestApplication();
+  @Get('bad')
+  bad(): never {
+    throw new BadRequestException('参数错误');
+  }
+
+  @Get('failure')
+  failure(): never {
+    throw new Error('probe-failure');
+  }
+}
+
+interface HttpLogRecord {
+  level: number;
+  msg: string;
+  context?: string;
+  responseTime?: number;
+  req?: { id: string; url: string };
+  res?: { statusCode: number };
+  err?: { stack: string };
+}
+
+describe('Gateway Fastify 日志链路 (e2e)', () => {
+  let app: NestFastifyApplication;
+  let directory: string;
+
+  beforeAll(async () => {
+    directory = await mkdtemp(join(tmpdir(), 'nest-logger-http-'));
+    // Vitest 的转换链不保证生成构造参数元数据，仅在测试中补充已有生产类型。
+    Reflect.defineMetadata('design:paramtypes', [AppService], AppController);
+    Reflect.defineMetadata('design:paramtypes', [HttpAdapterHost], AllExceptionsFilter);
+    const config = loggerDomain.parse({ console: { enabled: false }, file: { directory } }, { environment: 'test' });
+    const module = await Test.createTestingModule({ imports: [AppModule], controllers: [LogProbeController] })
+      .overrideProvider(loggerConfig.KEY)
+      .useValue(config)
+      .compile();
+    app = module.createNestApplication<NestFastifyApplication>(new FastifyAdapter(), { logger: false });
+    app.useLogger(app.get(LoggerService));
     await app.init();
+    await app.getHttpAdapter().getInstance().ready();
   });
 
-  it('/ (GET)', () => {
-    return request(app.getHttpServer())
-      .get('/')
-      .expect(200)
-      .expect('Hello World!');
+  afterAll(async () => {
+    Logger.overrideLogger(new ConsoleLogger());
+    await app?.close();
+    if (directory) await rm(directory, { recursive: true, force: true });
   });
 
-  afterEach(async () => {
-    await app.close();
+  async function records(prefix = 'gateway'): Promise<HttpLogRecord[]> {
+    const names = (await readdir(directory)).filter(file => file.startsWith(`${prefix}.`));
+    const contents = await Promise.all(names.map(file => readFile(join(directory, file), 'utf8')));
+    return contents.flatMap(content => content.split('\n').filter(Boolean).map(line => JSON.parse(line) as HttpLogRecord));
+  }
+
+  it('实际根模块按 Fastify 启动，保留既有根接口', async () => {
+    const response = await app.inject({ method: 'GET', url: '/' });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toBe('Hello World!');
+  });
+
+  it('并发请求跨 await 的业务日志与访问日志使用实际 Fastify ID，且不泄露凭据', async () => {
+    const responses = await Promise.all(Array.from({ length: 3 }, () => app.inject({
+      method: 'POST',
+      url: '/log-probe/ok?token=query-secret',
+      headers: { authorization: 'Bearer header-secret', cookie: 'session=cookie-secret', 'x-request-id': 'untrusted-id' },
+      payload: { password: 'body-secret' },
+    })));
+    const ids = responses.map(response => {
+      expect(response.statusCode).toBe(201);
+      return response.json<{ id: string }>().id;
+    });
+    expect(new Set(ids).size).toBe(3);
+    expect(ids).not.toContain('untrusted-id');
+
+    await vi.waitFor(async () => {
+      const logs = await records();
+      for (const id of ids) {
+        const matching = logs.filter(log => log.req?.id === id);
+        expect(matching.filter(log => log.msg === 'probe-business')).toHaveLength(1);
+        expect(matching.filter(log => log.msg === 'probe-nest' && log.context === 'ProbeService')).toHaveLength(1);
+        const access = matching.filter(log => log.res?.statusCode === 201);
+        expect(access).toHaveLength(1);
+        expect(access[0]).toMatchObject({ level: 30, req: { url: '/log-probe/ok' } });
+        expect(access[0].responseTime).toBeTypeOf('number');
+      }
+      const content = JSON.stringify(logs);
+      expect(content).not.toMatch(/query-secret|header-secret|cookie-secret|body-secret|business-secret/);
+    });
+  });
+
+  it('4xx 为 warn 且不进入错误文件，5xx 和原始堆栈进入 error 文件', async () => {
+    const bad = await app.inject({ method: 'GET', url: '/log-probe/bad' });
+    const failure = await app.inject({ method: 'GET', url: '/log-probe/failure' });
+    expect(bad.statusCode).toBe(400);
+    expect(failure.statusCode).toBe(500);
+    expect(failure.body).not.toContain('probe-failure');
+    await vi.waitFor(async () => {
+      const main = await records();
+      expect(main.filter(log => log.res?.statusCode === 400)).toMatchObject([{ level: 40 }]);
+      expect(main.filter(log => log.res?.statusCode === 500)).toMatchObject([{ level: 50 }]);
+      const errors = await records('error');
+      expect(errors.some(log => log.req?.url === '/log-probe/bad')).toBe(false);
+      expect(errors.some(log => log.err?.stack.includes('probe-failure'))).toBe(true);
+      expect(errors.some(log => log.res?.statusCode === 500)).toBe(true);
+    });
+  });
+
+  it('框架 404 同样只产生一条请求完成日志', async () => {
+    expect((await app.inject({ method: 'GET', url: '/missing-route' })).statusCode).toBe(404);
+    await vi.waitFor(async () => {
+      const access = (await records()).filter(log => log.req?.url === '/missing-route' && log.res);
+      expect(access).toHaveLength(1);
+      expect(access[0].level).toBe(40);
+    });
   });
 });

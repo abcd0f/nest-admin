@@ -5,3 +5,7 @@
 app:
   # HTTP 服务端口
   port: 6688
+
+logger:
+  # 开发环境记录 debug 及以上日志
+  level: debug

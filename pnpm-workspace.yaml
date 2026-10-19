@@ -9,3 +9,6 @@ allowBuilds:
   '@prisma/engines': true
   '@scarf/scarf': true
   prisma: true
+
+patchedDependencies:
+  pino-roll@4.0.0: patches/pino-roll@4.0.0.patch

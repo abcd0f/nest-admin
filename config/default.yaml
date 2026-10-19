@@ -10,3 +10,23 @@
 app:
   # HTTP 服务端口
   port: 3000
+
+logger:
+  # 全局最低日志级别：trace / debug / info / warn / error / fatal
+  level: info
+  console:
+    # 是否输出到控制台
+    enabled: true
+    # 是否使用彩色可读输出；false 时输出 JSON
+    pretty: true
+  file:
+    # 同时启用主日志与独立 error 文件
+    enabled: true
+    # 日志目录，相对进程工作目录；每个进程须独占此目录
+    directory: logs/gateway
+    # 每类日志的单文件轮转阈值，单位 MB
+    size-mb: 20
+    # 按 hourly / daily / weekly 轮转，同时满足大小轮转
+    frequency: daily
+    # 每类文件最多保留的数量，包含活动文件；不是保留天数
+    max-files: 15
