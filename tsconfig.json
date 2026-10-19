@@ -7,11 +7,36 @@
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "paths": {
-      "@app/config": ["./libs/config/src/index.ts"],
-      "@app/config/*": ["./libs/config/src/*"]
+      "@app/common": [
+        "./libs/common/src/index.ts"
+      ],
+      "@app/common/*": [
+        "./libs/common/src/*"
+      ],
+      "@app/config": [
+        "./libs/config/src/index.ts"
+      ],
+      "@app/config/*": [
+        "./libs/config/src/*"
+      ],
+      "@app/core": [
+        "./libs/core/src/index.ts"
+      ],
+      "@app/core/*": [
+        "./libs/core/src/*"
+      ],
+      "@app/logger": [
+        "./libs/logger/src/index.ts"
+      ],
+      "@app/logger/*": [
+        "./libs/logger/src/*"
+      ]
     },
     "resolvePackageJsonExports": true,
-    "types": ["vitest/globals", "node"],
+    "types": [
+      "vitest/globals",
+      "node"
+    ],
     "strict": true,
     "strictPropertyInitialization": false,
     "declaration": true,
