@@ -21,7 +21,5 @@ async function bootstrap() {
   await app.listen(port, '0.0.0.0');
 
   logger.log(`Application listening on ${await app.getUrl()}`);
-
-  console.log(`9999999999 ${await app.getUrl()}`);
 }
 await bootstrap();
