@@ -13,6 +13,33 @@ app:
   # 全局 API 前缀，例如 api 或 api/v1
   api-prefix: api
 
+redis:
+  # 渐进接入：默认不缓存，也不创建 Redis 连接；启用后 Redis 连接失败将阻止启动
+  enabled: false
+  # 默认缓存时长，单位毫秒；1..2147483647，禁止 0/永久缓存
+  ttl: 60000
+  # 单机 Redis 地址，独立环境使用各自的差异层覆盖
+  host: 127.0.0.1
+  # TCP 端口，1..65535
+  port: 6379
+  # ACL 用户名可选；凭据仅放在不入库的 <环境>.local.yaml 或挂载的配置中
+  # username: cache-user
+  # password: 由部署平台注入，不要提交真实密码
+  # 数据库编号，非负整数；服务器必须已配置该数据库
+  db: 0
+  # Keyv 命名空间；最终键形如 nest-admin:cache:users:v1:42，不要添加末尾冒号
+  key-prefix: nest-admin:cache
+  # 首次建立连接的超时，单位毫秒，必须为正整数
+  connect-timeout: 2000
+  # 单条命令的超时，单位毫秒，必须为正整数
+  command-timeout: 1000
+  # 每条待执行命令的最大重试次数，非负整数；故障期间不接受离线排队
+  max-retries-per-request: 0
+  # 运行期重连的线性退避基数，1..30000 毫秒，间隔最多 30000 毫秒
+  retry-delay: 1000
+  # 启用 TLS 时校验服务器证书；私有 CA 使用 Node 的 NODE_EXTRA_CA_CERTS
+  tls-enabled: false
+
 database:
   # 且启动时不会报配置错误（结构是合法的），请务必确认本地文件已建好。
   url: postgresql://USER:PASSWORD@localhost:5432/DATABASE?schema=public

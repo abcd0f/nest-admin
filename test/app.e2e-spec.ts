@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setImmediate } from 'node:timers/promises';
 import { createFastifyAdapter } from '@app/common';
-import { loggerConfig } from '@app/config';
+import { loggerConfig, redisConfig } from '@app/config';
 import { AllExceptionsFilter } from '@app/core';
 import { LoggerService, PinoLogger } from '@app/logger';
 import { BadRequestException, ConsoleLogger, Controller, Get, Inject, Logger, Post, Req } from '@nestjs/common';
@@ -12,10 +12,9 @@ import { ConfigService } from '@nestjs/config';
 import { HttpAdapterHost } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { AppController } from '../apps/gateway/src/app.controller.js';
 import { AppModule } from '../apps/gateway/src/app.module.js';
-import { AppService } from '../apps/gateway/src/app.service.js';
 import { loggerDomain } from '../libs/config/src/domains/logger.domain.js';
+import { redisDomain } from '../libs/config/src/domains/redis.domain.js';
 
 @Controller('log-probe')
 class LogProbeController {
@@ -57,10 +56,11 @@ describe('Gateway Fastify 日志链路 (e2e)', () => {
   beforeAll(async () => {
     directory = await mkdtemp(join(tmpdir(), 'nest-logger-http-'));
     // Vitest 的转换链不保证生成构造参数元数据，仅在测试中补充已有生产类型。
-    Reflect.defineMetadata('design:paramtypes', [AppService], AppController);
     Reflect.defineMetadata('design:paramtypes', [HttpAdapterHost], AllExceptionsFilter);
     const config = loggerDomain.parse({ console: { enabled: false }, file: { directory } }, { environment: 'test' });
     const module = await Test.createTestingModule({ imports: [AppModule], controllers: [LogProbeController] })
+      .overrideProvider(redisConfig.KEY)
+      .useValue(redisDomain.parse({ enabled: false }, { environment: 'test' }))
       .overrideProvider(loggerConfig.KEY)
       .useValue(config)
       .compile();
@@ -86,7 +86,7 @@ describe('Gateway Fastify 日志链路 (e2e)', () => {
   it('实际根模块按 Fastify 启动，根接口使用配置的全局 API 前缀', async () => {
     const response = await app.inject({ method: 'GET', url: '/api' });
     expect(response.statusCode).toBe(200);
-    expect(response.body).toBe('Hello World!');
+    expect(response.body).toBe('欢迎使用 Nest.js 构建的 API 接口服务！');
   });
 
   it('不带全局 API 前缀的根接口返回 404', async () => {

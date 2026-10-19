@@ -168,6 +168,27 @@ export class ExampleController {
 
 客户端身份沿用 Fastify `request.ip`。当前适配器已启用 `trustProxy: true`，通过反向代理部署时，代理需可靠覆盖客户端传入的转发头，保证限流使用正确的客户端地址。
 
+## Redis 缓存
+
+`@app/cache` 已接入网关，默认关闭缓存，不要求本机运行 Redis。开关、默认 TTL 和连接选项统一放在 `redis` 下，配置沿用现有分层 YAML。在 `config/development.local.yaml` 中覆盖以下配置，确保 Redis 已运行，再执行 `pnpm start:dev`：
+
+```yaml
+redis:
+  enabled: true
+  ttl: 60000 # 毫秒
+  host: 127.0.0.1
+  port: 6379
+```
+
+其余连接选项见 `config/default.yaml`。已有本地配置需将原 `cache` 下的 `enabled`、`ttl` 移到 `redis` 下。生产凭据通过不入库的 `config/production.local.yaml` 挂载。
+
+业务模块显式导入 `CacheModule`，注入 `CacheService` 使用 `get/set/del/wrap`。TTL 统一为正整数毫秒，默认 60000，禁止 0/永久缓存。启用时连接失败阻止启动；运行期读取失败按未命中处理，写入、删除以及 wrap 的写入失败会抛出错误。
+
+```sh
+# REDIS_TEST_URL 指向本机独立测试 Redis 后运行
+pnpm test:cache:e2e
+```
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.

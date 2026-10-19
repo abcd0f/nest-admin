@@ -1,6 +1,7 @@
 import { appConfig, appDomain } from './app.domain.js';
 import { databaseConfig, databaseDomain } from './database.domain.js';
 import { loggerConfig, loggerDomain } from './logger.domain.js';
+import { redisConfig, redisDomain } from './redis.domain.js';
 import { swaggerConfig, swaggerDomain } from './swagger.domain.js';
 import { throttlerConfig, throttlerDomain } from './throttler.domain.js';
 
@@ -20,12 +21,14 @@ export const DOMAINS = [
   swaggerDomain,
   throttlerDomain,
   databaseDomain,
+  redisDomain,
 ] as const;
 
-export { appConfig, databaseConfig, loggerConfig, swaggerConfig, throttlerConfig };
+export { appConfig, databaseConfig, loggerConfig, redisConfig, swaggerConfig, throttlerConfig };
 
 export type { AppConfig, NodeEnv } from './app.domain.js';
 export type { DatabaseConfig, DatabasePoolConfig } from './database.domain.js';
 export type { LoggerConfig } from './logger.domain.js';
+export type { RedisConfig } from './redis.domain.js';
 export type { SwaggerConfig } from './swagger.domain.js';
 export type { ThrottlerConfig } from './throttler.domain.js';

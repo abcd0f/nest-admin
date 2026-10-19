@@ -7,6 +7,12 @@
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "paths": {
+      "@app/cache": [
+        "./libs/cache/src/index.ts"
+      ],
+      "@app/cache/*": [
+        "./libs/cache/src/*"
+      ],
       "@app/common": [
         "./libs/common/src/index.ts"
       ],
