@@ -6,6 +6,11 @@ app:
   # HTTP 服务端口
   port: 6688
 
+database:
+  # 开发期打印 SQL，方便排查
+  log-queries: true
+  url: postgresql://root:123456@localhost:5432/nest-admin?schema=public
+
 logger:
   # 开发环境记录 debug 及以上日志
   level: debug

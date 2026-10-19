@@ -107,7 +107,7 @@ export class UsersController {
 }
 ```
 
-DTO 应使用普通值导入，避免 `import type` 擦除运行时模型。TypeScript interface、内联对象以及 `PageResponseDto<UserDto>` 这样的泛型不能完整保留运行时模型；需要自动生成准确文档时，定义具体 DTO class，并使用具体的嵌套字段类型。
+DTO 应使用普通值导入，避免 `import type` 擦除运行时模型。TypeScript interface、内联对象以及泛型不能完整保留运行时模型；需要自动生成准确文档时，定义具体 DTO class，并使用具体的嵌套字段类型。
 
 注释解析发生在编译阶段，使用 `pnpm start`、`pnpm start:dev` 或 `pnpm build`（均经过 Nest CLI）。单独运行 `tsc`、`tsx` 或 Vitest 默认转换链不会执行该插件。修改 `nest-cli.json` 后重启开发服务；`removeComments: true` 可以保留，因为插件会在移除注释前提取元数据。
 

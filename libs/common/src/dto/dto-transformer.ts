@@ -1,6 +1,4 @@
-import type { PageResponseDto } from './base.dto.js';
 import { ClassConstructor, plainToInstance } from 'class-transformer';
-import { PageMetaDto } from './base.dto.js';
 
 const SERIALIZE_OPTIONS = { excludeExtraneousValues: true, enableImplicitConversion: true };
 
@@ -12,16 +10,6 @@ export function toDto<T>(cls: ClassConstructor<T>, plain: object | null | undefi
 export function toDtoList<T>(cls: ClassConstructor<T>, plainList: object[] | null | undefined): T[] {
   if (!plainList || !Array.isArray(plainList)) return [];
   return plainList.map((item) => plainToInstance(cls, item, SERIALIZE_OPTIONS));
-}
-
-export function toPageDto<T>(
-  cls: ClassConstructor<T>,
-  data: PageResponseDto<object>,
-) {
-  return {
-    items: toDtoList(cls, data.items),
-    meta: plainToInstance(PageMetaDto, data.meta, SERIALIZE_OPTIONS),
-  };
 }
 
 /**

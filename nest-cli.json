@@ -11,7 +11,10 @@
         "options": {
           "introspectComments": true,
           "classValidatorShim": true,
-          "dtoFileNameSuffix": [".dto.ts", ".entity.ts"],
+          "dtoFileNameSuffix": [
+            ".dto.ts",
+            ".entity.ts"
+          ],
           "controllerKeyOfComment": "summary",
           "dtoKeyOfComment": "description",
           "esmCompatible": true
@@ -45,6 +48,15 @@
       "sourceRoot": "libs/core/src",
       "compilerOptions": {
         "tsConfigPath": "libs/core/tsconfig.lib.json"
+      }
+    },
+    "database": {
+      "type": "library",
+      "root": "libs/database",
+      "entryFile": "index",
+      "sourceRoot": "libs/database/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/database/tsconfig.lib.json"
       }
     },
     "gateway": {

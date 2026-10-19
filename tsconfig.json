@@ -25,6 +25,12 @@
       "@app/core/*": [
         "./libs/core/src/*"
       ],
+      "@app/database": [
+        "./libs/database/src/index.ts"
+      ],
+      "@app/database/*": [
+        "./libs/database/src/*"
+      ],
       "@app/logger": [
         "./libs/logger/src/index.ts"
       ],

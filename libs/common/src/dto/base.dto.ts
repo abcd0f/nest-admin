@@ -57,53 +57,6 @@ export class PageQueryDto {
 }
 
 /**
- * 分页元数据
- */
-export class PageMetaDto {
-  /**
-   * 页码
-   */
-  @Expose()
-  @IsInt()
-  page!: number;
-
-  /**
-   * 页大小
-   */
-  @Expose()
-  pageSize!: number;
-
-  /**
-   * 总数
-   */
-  @Expose()
-  total!: number;
-
-  /**
-   * 总页数
-   */
-  @Expose()
-  totalPage!: number;
-}
-
-/**
- * 分页响应数据
- */
-export class PageResponseDto<T> {
-  /**
-   * 数据项
-   */
-  @Expose()
-  items!: T[];
-
-  /**
-   * 分页元数据
-   */
-  @Expose()
-  meta!: PageMetaDto;
-}
-
-/**
  * 基础实体
  */
 export class BaseEntityDto {

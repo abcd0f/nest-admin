@@ -8,6 +8,16 @@
 app:
   port: 80
 
+database:
+  pool:
+    # 生产建议按「实例数 × max < PG max_connections」计算，并配合 PgBouncer 之类的中间件
+    max: 20
+    idle-timeout: 30000
+    connect-timeout: 5000
+  # 生产环境禁止打印 SQL
+  log-queries: false
+  url: postgresql://root:123456@localhost:5432/nest-admin?schema=public
+
 logger:
   console:
     # 生产环境默认使用 JSON，便于日志平台采集；可覆盖为 true 开启彩色

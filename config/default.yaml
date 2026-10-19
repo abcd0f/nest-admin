@@ -13,6 +13,19 @@ app:
   # 全局 API 前缀，例如 api 或 api/v1
   api-prefix: api
 
+database:
+  # 且启动时不会报配置错误（结构是合法的），请务必确认本地文件已建好。
+  url: postgresql://USER:PASSWORD@localhost:5432/DATABASE?schema=public
+  pool:
+    # 单实例最大连接数。总连接数 = 实例数 × max，不要超过 PostgreSQL 的 max_connections
+    max: 10
+    # 空闲连接回收时间（毫秒）
+    idle-timeout: 10000
+    # 建立连接超时（毫秒）
+    connect-timeout: 5000
+  # 是否打印 SQL 日志。生产环境务必保持 false
+  log-queries: false
+
 logger:
   # 全局最低日志级别：trace / debug / info / warn / error / fatal
   level: info

@@ -1,4 +1,5 @@
 import { appConfig, appDomain } from './app.domain.js';
+import { databaseConfig, databaseDomain } from './database.domain.js';
 import { loggerConfig, loggerDomain } from './logger.domain.js';
 import { swaggerConfig, swaggerDomain } from './swagger.domain.js';
 import { throttlerConfig, throttlerDomain } from './throttler.domain.js';
@@ -13,11 +14,18 @@ import { throttlerConfig, throttlerDomain } from './throttler.domain.js';
  *   1. 新建 `domains/<name>.domain.ts`，用 defineConfigDomain 实现 parse/validate
  *   2. 在下方 imports 加一行、DOMAINS 数组加一项、文件末尾补类型导出
  */
-export const DOMAINS = [appDomain, loggerDomain, swaggerDomain, throttlerDomain] as const;
+export const DOMAINS = [
+  appDomain,
+  loggerDomain,
+  swaggerDomain,
+  throttlerDomain,
+  databaseDomain,
+] as const;
 
-export { appConfig, loggerConfig, swaggerConfig, throttlerConfig };
+export { appConfig, databaseConfig, loggerConfig, swaggerConfig, throttlerConfig };
 
 export type { AppConfig, NodeEnv } from './app.domain.js';
+export type { DatabaseConfig, DatabasePoolConfig } from './database.domain.js';
 export type { LoggerConfig } from './logger.domain.js';
 export type { SwaggerConfig } from './swagger.domain.js';
 export type { ThrottlerConfig } from './throttler.domain.js';
