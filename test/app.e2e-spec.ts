@@ -3,12 +3,12 @@ import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setImmediate } from 'node:timers/promises';
+import { createFastifyAdapter } from '@app/common';
 import { loggerConfig } from '@app/config';
 import { AllExceptionsFilter } from '@app/core';
 import { LoggerService, PinoLogger } from '@app/logger';
 import { BadRequestException, ConsoleLogger, Controller, Get, Inject, Logger, Post, Req } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
-import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { AppController } from '../apps/gateway/src/app.controller.js';
@@ -63,7 +63,7 @@ describe('Gateway Fastify 日志链路 (e2e)', () => {
       .overrideProvider(loggerConfig.KEY)
       .useValue(config)
       .compile();
-    app = module.createNestApplication<NestFastifyApplication>(new FastifyAdapter(), { logger: false });
+    app = module.createNestApplication<NestFastifyApplication>(createFastifyAdapter(), { logger: false });
     app.useLogger(app.get(LoggerService));
     await app.init();
     await app.getHttpAdapter().getInstance().ready();

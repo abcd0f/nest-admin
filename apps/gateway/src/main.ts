@@ -1,13 +1,13 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import { createFastifyAdapter } from '@app/common';
 import { LoggerService } from '@app/logger';
 import { ConfigService } from '@nestjs/config';
 
 import { NestFactory } from '@nestjs/core';
-import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { AppModule } from './app.module.js';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter(), {
+  const app = await NestFactory.create<NestFastifyApplication>(AppModule, createFastifyAdapter(), {
     bufferLogs: true,
   });
   const logger = app.get(LoggerService);
@@ -19,6 +19,8 @@ async function bootstrap() {
 
   await app.listen(port, '0.0.0.0');
 
-  logger.log(`Application listening on ${await app.getUrl()}`, 'Bootstrap');
+  logger.log(`Application listening on ${await app.getUrl()}`);
+
+  console.log(`9999999999 ${await app.getUrl()}`);
 }
 await bootstrap();
