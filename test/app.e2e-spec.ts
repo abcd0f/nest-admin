@@ -8,6 +8,7 @@ import { loggerConfig } from '@app/config';
 import { AllExceptionsFilter } from '@app/core';
 import { LoggerService, PinoLogger } from '@app/logger';
 import { BadRequestException, ConsoleLogger, Controller, Get, Inject, Logger, Post, Req } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { HttpAdapterHost } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -65,6 +66,7 @@ describe('Gateway Fastify 日志链路 (e2e)', () => {
       .compile();
     app = module.createNestApplication<NestFastifyApplication>(createFastifyAdapter(), { logger: false });
     app.useLogger(app.get(LoggerService));
+    app.setGlobalPrefix(app.get(ConfigService).getOrThrow<string>('app.apiPrefix'));
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
   });
@@ -81,16 +83,20 @@ describe('Gateway Fastify 日志链路 (e2e)', () => {
     return contents.flatMap(content => content.split('\n').filter(Boolean).map(line => JSON.parse(line) as HttpLogRecord));
   }
 
-  it('实际根模块按 Fastify 启动，保留既有根接口', async () => {
-    const response = await app.inject({ method: 'GET', url: '/' });
+  it('实际根模块按 Fastify 启动，根接口使用配置的全局 API 前缀', async () => {
+    const response = await app.inject({ method: 'GET', url: '/api' });
     expect(response.statusCode).toBe(200);
     expect(response.body).toBe('Hello World!');
+  });
+
+  it('不带全局 API 前缀的根接口返回 404', async () => {
+    expect((await app.inject({ method: 'GET', url: '/' })).statusCode).toBe(404);
   });
 
   it('并发请求跨 await 的业务日志与访问日志使用实际 Fastify ID，且不泄露凭据', async () => {
     const responses = await Promise.all(Array.from({ length: 3 }, () => app.inject({
       method: 'POST',
-      url: '/log-probe/ok?token=query-secret',
+      url: '/api/log-probe/ok?token=query-secret',
       headers: { authorization: 'Bearer header-secret', cookie: 'session=cookie-secret', 'x-request-id': 'untrusted-id' },
       payload: { password: 'body-secret' },
     })));
@@ -109,7 +115,7 @@ describe('Gateway Fastify 日志链路 (e2e)', () => {
         expect(matching.filter(log => log.msg === 'probe-nest' && log.context === 'ProbeService')).toHaveLength(1);
         const access = matching.filter(log => log.res?.statusCode === 201);
         expect(access).toHaveLength(1);
-        expect(access[0]).toMatchObject({ level: 30, req: { url: '/log-probe/ok' } });
+        expect(access[0]).toMatchObject({ level: 30, req: { url: '/api/log-probe/ok' } });
         expect(access[0].responseTime).toBeTypeOf('number');
       }
       const content = JSON.stringify(logs);
@@ -118,8 +124,8 @@ describe('Gateway Fastify 日志链路 (e2e)', () => {
   });
 
   it('4xx 为 warn 且不进入错误文件，5xx 和原始堆栈进入 error 文件', async () => {
-    const bad = await app.inject({ method: 'GET', url: '/log-probe/bad' });
-    const failure = await app.inject({ method: 'GET', url: '/log-probe/failure' });
+    const bad = await app.inject({ method: 'GET', url: '/api/log-probe/bad' });
+    const failure = await app.inject({ method: 'GET', url: '/api/log-probe/failure' });
     expect(bad.statusCode).toBe(400);
     expect(failure.statusCode).toBe(500);
     expect(failure.body).not.toContain('probe-failure');
@@ -128,16 +134,16 @@ describe('Gateway Fastify 日志链路 (e2e)', () => {
       expect(main.filter(log => log.res?.statusCode === 400)).toMatchObject([{ level: 40 }]);
       expect(main.filter(log => log.res?.statusCode === 500)).toMatchObject([{ level: 50 }]);
       const errors = await records('error');
-      expect(errors.some(log => log.req?.url === '/log-probe/bad')).toBe(false);
+      expect(errors.some(log => log.req?.url === '/api/log-probe/bad')).toBe(false);
       expect(errors.some(log => log.err?.stack.includes('probe-failure'))).toBe(true);
       expect(errors.some(log => log.res?.statusCode === 500)).toBe(true);
     });
   });
 
   it('框架 404 同样只产生一条请求完成日志', async () => {
-    expect((await app.inject({ method: 'GET', url: '/missing-route' })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'GET', url: '/api/missing-route' })).statusCode).toBe(404);
     await vi.waitFor(async () => {
-      const access = (await records()).filter(log => log.req?.url === '/missing-route' && log.res);
+      const access = (await records()).filter(log => log.req?.url === '/api/missing-route' && log.res);
       expect(access).toHaveLength(1);
       expect(access[0].level).toBe(40);
     });
