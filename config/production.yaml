@@ -12,3 +12,7 @@ logger:
   console:
     # 生产环境默认使用 JSON，便于日志平台采集；可覆盖为 true 开启彩色
     pretty: false
+
+swagger:
+  # 生产环境默认关闭文档，可在 production.local.yaml 中覆盖
+  enabled: false

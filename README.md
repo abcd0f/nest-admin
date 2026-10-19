@@ -57,6 +57,60 @@ $ pnpm run test:e2e
 $ pnpm run test:cov
 ```
 
+## Swagger 接口文档
+
+启动 `pnpm start:dev` 后，开发环境默认地址：
+
+- Swagger UI：`http://localhost:6688/api/docs`
+- OpenAPI JSON：`http://localhost:6688/api/docs-json`
+- OpenAPI YAML：`http://localhost:6688/api/docs-yaml`
+
+文档路由自动跟随 `app.api-prefix`。在 `config/default.yaml` 的 `swagger` 节点可修改 `enabled`、`path`、`title`、`description` 和 `version`；生产环境在 `config/production.yaml` 中默认关闭，需要时可在 `config/production.local.yaml` 中设置 `swagger.enabled: true`。
+
+项目已在 `nest-cli.json` 中启用官方 `@nestjs/swagger` 编译插件及 `introspectComments`。DTO 使用 `.dto.ts` 或 `.entity.ts` 文件名，声明为导出的 class，直接用文档注释描述字段，无需手写 `@ApiProperty()`：
+
+```ts
+// user.dto.ts
+export class UserDto {
+  /**
+   * A list of user's roles
+   * @example ['admin']
+   */
+  roles!: string[];
+
+  /**
+   * 用户昵称
+   * @example '张三'
+   */
+  nickname?: string;
+}
+```
+
+注释正文生成字段 `description`，`@example` 生成示例；插件根据 TypeScript 类型推导字段类型和数组元素，根据 `?` 判断是否必填。已有 `class-validator` 装饰器中的 `@Min()`、`@Max()` 等约束也会同步到文档；校验装饰器仍按业务需要保留，注释本身不执行运行时校验。
+
+控制器使用 `.controller.ts` 文件名，方法注释生成接口摘要，`@remarks` 生成详细说明。声明具体的返回 DTO 类型，插件即可生成响应模型，无需手写 `@ApiOperation()`、`@ApiResponse()`：
+
+```ts
+import { Body, Controller, Post } from '@nestjs/common';
+import { UserDto } from './user.dto.js';
+
+@Controller('users')
+export class UsersController {
+  /**
+   * 创建用户
+   * @remarks 根据提交的角色和昵称创建用户。
+   */
+  @Post()
+  create(@Body() body: UserDto): UserDto {
+    return body;
+  }
+}
+```
+
+DTO 应使用普通值导入，避免 `import type` 擦除运行时模型。TypeScript interface、内联对象以及 `PageResponseDto<UserDto>` 这样的泛型不能完整保留运行时模型；需要自动生成准确文档时，定义具体 DTO class，并使用具体的嵌套字段类型。
+
+注释解析发生在编译阶段，使用 `pnpm start`、`pnpm start:dev` 或 `pnpm build`（均经过 Nest CLI）。单独运行 `tsc`、`tsx` 或 Vitest 默认转换链不会执行该插件。修改 `nest-cli.json` 后重启开发服务；`removeComments: true` 可以保留，因为插件会在移除注释前提取元数据。
+
 ## HTTP 限流
 
 `CoreModule` 统一注册 `@nestjs/throttler` 的全局守卫，配置由 `AppConfigModule.forRoot()` 提前加载和校验。业务模块导入现有基础设施后，接口默认参与限流。

@@ -1,6 +1,7 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { createFastifyAdapter } from '@app/common';
 import { LoggerService } from '@app/logger';
+import { SwaggerService } from '@app/swagger';
 import { ConfigService } from '@nestjs/config';
 
 import { NestFactory } from '@nestjs/core';
@@ -17,6 +18,7 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const port = configService.get<number>('app.port', 3000);
   app.setGlobalPrefix(configService.getOrThrow<string>('app.apiPrefix'));
+  app.get(SwaggerService).setup(app);
 
   await app.listen(port, '0.0.0.0');
 

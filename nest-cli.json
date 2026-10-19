@@ -4,7 +4,20 @@
   "sourceRoot": "apps/gateway/src",
   "compilerOptions": {
     "deleteOutDir": true,
-    "builder": "tsc"
+    "builder": "tsc",
+    "plugins": [
+      {
+        "name": "@nestjs/swagger",
+        "options": {
+          "introspectComments": true,
+          "classValidatorShim": true,
+          "dtoFileNameSuffix": [".dto.ts", ".entity.ts"],
+          "controllerKeyOfComment": "summary",
+          "dtoKeyOfComment": "description",
+          "esmCompatible": true
+        }
+      }
+    ]
   },
   "projects": {
     "common": {
@@ -50,6 +63,15 @@
       "sourceRoot": "libs/logger/src",
       "compilerOptions": {
         "tsConfigPath": "libs/logger/tsconfig.lib.json"
+      }
+    },
+    "swagger": {
+      "type": "library",
+      "root": "libs/swagger",
+      "entryFile": "index",
+      "sourceRoot": "libs/swagger/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/swagger/tsconfig.lib.json"
       }
     }
   }

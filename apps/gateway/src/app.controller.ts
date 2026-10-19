@@ -1,12 +1,15 @@
 import { Controller, Get } from '@nestjs/common';
-import { AppService } from './app.service.js';
 
 @Controller()
 export class AppController {
-  constructor(private readonly appService: AppService) {}
+  constructor() {}
 
+  /**
+   * 获取欢迎信息
+   * @remarks 用于验证网关服务是否正常运行。
+   */
   @Get()
   getHello(): string {
-    return this.appService.getHello();
+    return '欢迎使用 Nest.js 构建的 API 接口服务！';
   }
 }

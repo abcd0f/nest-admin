@@ -33,6 +33,18 @@ logger:
     # 每类文件最多保留的数量，包含活动文件；不是保留天数
     max-files: 15
 
+swagger:
+  # 是否启用 Swagger UI 及 JSON/YAML 文档；生产环境在 production.yaml 中关闭
+  enabled: true
+  # 文档路径，自动加上 app.api-prefix；默认 /api/docs
+  path: docs
+  # 文档标题
+  title: Nest Admin API
+  # 文档说明
+  description: Nest Admin 接口文档
+  # API 文档版本
+  version: 1.0.0
+
 throttler:
   # 是否启用全部 HTTP 接口的限流；关闭后局部装饰器也不生效
   enabled: true
