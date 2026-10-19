@@ -32,3 +32,13 @@ logger:
     frequency: daily
     # 每类文件最多保留的数量，包含活动文件；不是保留天数
     max-files: 15
+
+throttler:
+  # 是否启用全部 HTTP 接口的限流；关闭后局部装饰器也不生效
+  enabled: true
+  # 同一客户端对每个接口的计数有效期，单位毫秒
+  ttl: 60000
+  # 在有效期内允许的请求数量
+  limit: 100
+  # 超限后的封禁时长，单位毫秒；省略时使用接口生效的 ttl，0 表示不附加封禁
+  # block-duration: 60000

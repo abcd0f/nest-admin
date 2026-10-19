@@ -1,5 +1,6 @@
 import { appConfig, appDomain } from './app.domain.js';
 import { loggerConfig, loggerDomain } from './logger.domain.js';
+import { throttlerConfig, throttlerDomain } from './throttler.domain.js';
 
 /**
  * 域注册表 —— 新增配置域时唯一需要改动的清单。
@@ -11,9 +12,10 @@ import { loggerConfig, loggerDomain } from './logger.domain.js';
  *   1. 新建 `domains/<name>.domain.ts`，用 defineConfigDomain 实现 parse/validate
  *   2. 在下方 imports 加一行、DOMAINS 数组加一项、文件末尾补类型导出
  */
-export const DOMAINS = [appDomain, loggerDomain] as const;
+export const DOMAINS = [appDomain, loggerDomain, throttlerDomain] as const;
 
-export { appConfig, loggerConfig };
+export { appConfig, loggerConfig, throttlerConfig };
 
 export type { AppConfig, NodeEnv } from './app.domain.js';
 export type { LoggerConfig } from './logger.domain.js';
+export type { ThrottlerConfig } from './throttler.domain.js';

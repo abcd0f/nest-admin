@@ -57,6 +57,63 @@ $ pnpm run test:e2e
 $ pnpm run test:cov
 ```
 
+## HTTP 限流
+
+`CoreModule` 统一注册 `@nestjs/throttler` 的全局守卫，配置由 `AppConfigModule.forRoot()` 提前加载和校验。业务模块导入现有基础设施后，接口默认参与限流。
+
+默认按客户端 IP 和控制器处理方法分别计数：每个接口在 60 秒内最多请求 100 次。修改同一接口的查询参数或路径参数不会获得新的额度。计数使用进程内存，重启清空，适用于单实例；多个进程的额度不共享。
+
+在 `config/default.yaml` 配置默认规则，也可通过 `config/<环境>.yaml` 或 `config/<环境>.local.yaml` 覆盖：
+
+```yaml
+throttler:
+  # 总开关；false 时所有接口都跳过限流，包括使用 @Throttle() 的接口
+  enabled: true
+  # 计数有效期，单位毫秒，必须为正整数
+  ttl: 60000
+  # 允许的请求数量，必须为正整数
+  limit: 100
+  # 超限后的封禁时长，单位毫秒；省略时采用接口最终生效的 ttl
+  # block-duration: 60000
+```
+
+`block-duration` 可设为 `0`，表示不附加封禁，最早的计数过期后即可继续请求。关闭限流请使用 `enabled: false`。非法配置在启动阶段报错。
+
+使用官方装饰器即可覆盖或豁免控制器、方法，不需要额外注册守卫：
+
+```ts
+import { Controller, Get, Post } from '@nestjs/common';
+import { SkipThrottle, Throttle, seconds } from '@nestjs/throttler';
+
+@Controller('example')
+@Throttle({ default: { limit: 30, ttl: seconds(60) } }) // 可选：覆盖整个控制器
+export class ExampleController {
+  @Post('sensitive')
+  @Throttle({ default: { limit: 5 } }) // 只覆盖次数，继承控制器的时间窗口
+  sensitive() {
+    return { ok: true };
+  }
+
+  @Get('health')
+  @SkipThrottle() // 豁免此方法
+  health() {
+    return 'ok';
+  }
+}
+```
+
+也可在控制器上使用 `@SkipThrottle()` 豁免整个控制器，再在特定方法上使用 `@SkipThrottle({ default: false })` 恢复限流。策略名使用 `default`；装饰器的 `ttl` / `blockDuration` 同样以毫秒为单位，可使用官方的 `seconds()` 等时间工具。
+
+超限返回 HTTP `429` 和统一错误体：
+
+```json
+{ "code": 42900, "data": null, "message": "请求过于频繁" }
+```
+
+允许的请求带有 `X-RateLimit-Limit`、`X-RateLimit-Remaining`、`X-RateLimit-Reset` 响应头；拒绝的请求带有 `Retry-After`。时间响应头使用秒。
+
+客户端身份沿用 Fastify `request.ip`。当前适配器已启用 `trustProxy: true`，通过反向代理部署时，代理需可靠覆盖客户端传入的转发头，保证限流使用正确的客户端地址。
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
