@@ -1,0 +1,26 @@
+// Prisma schema
+// 文档：https://prisma.org.cn/docs/orm
+//
+// 注意：连接串不写在本文件里，统一由 prisma.config.ts + 环境变量注入，
+// 这样开发/正式环境切换只改 .env.*，不动 schema。
+
+generator client {
+  provider = "prisma-client"
+  output   = "../libs/database/src/generated/prisma"
+
+  // Prisma 7 默认走「查询编译器」，不再内置 Rust 引擎二进制。
+  // engineType = client 时必须配合驱动适配器（见 libs/database/src/prisma.service.ts）。
+  engineType = "client"
+
+  runtime = "nodejs"
+
+  // 本项目为严格 ESM（package.json type=module + tsconfig module=nodenext），
+  // 生成的相对导入必须带 .js 后缀才能被 tsc / rspack 正确解析。
+  moduleFormat           = "esm"
+  generatedFileExtension = "ts"
+  importFileExtension    = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
