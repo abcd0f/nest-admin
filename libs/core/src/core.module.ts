@@ -2,11 +2,12 @@ import type { ThrottlerConfig } from '@app/config';
 import type { ThrottlerModuleOptions } from '@nestjs/throttler';
 import { throttlerConfig } from '@app/config';
 import { Module } from '@nestjs/common';
-import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 import { BUSINESS_CODE, DEFAULT_BUSINESS_MESSAGE } from './constants/index.js';
 import { AllExceptionsFilter } from './filters/index.js';
+import { ResponseInterceptor } from './interceptors/index.js';
 
 /**
  * core 基础设施模块。
@@ -34,6 +35,10 @@ import { AllExceptionsFilter } from './filters/index.js';
     {
       provide: APP_FILTER,
       useClass: AllExceptionsFilter,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: ResponseInterceptor,
     },
   ],
 })

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { setImmediate } from 'node:timers/promises';
 import { createFastifyAdapter } from '@app/common';
 import { loggerConfig, redisConfig } from '@app/config';
-import { AllExceptionsFilter } from '@app/core';
+import { AllExceptionsFilter, RawResponse } from '@app/core';
 import { LoggerService, PinoLogger } from '@app/logger';
 import { BadRequestException, ConsoleLogger, Controller, Get, Inject, Logger, Post, Req } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -17,6 +17,7 @@ import { loggerDomain } from '../libs/config/src/domains/logger.domain.js';
 import { redisDomain } from '../libs/config/src/domains/redis.domain.js';
 
 @Controller('log-probe')
+@RawResponse()
 class LogProbeController {
   constructor(@Inject(PinoLogger) private readonly logger: PinoLogger) {}
 

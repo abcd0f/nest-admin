@@ -55,6 +55,13 @@ export const DEFAULT_BUSINESS_MESSAGE: Readonly<Record<number, string>> = {
   [BUSINESS_CODE.BUSINESS_FAILURE]: '业务处理失败',
 };
 
+/** 取状态码的默认提示语；未登记的码回落为通用文案。 */
+export function resultCodeMessage(code: number): string {
+  if (code === BUSINESS_CODE.SUCCESS) return DEFAULT_SUCCESS_MESSAGE;
+
+  return DEFAULT_BUSINESS_MESSAGE[code] ?? '请求处理失败';
+}
+
 /**
  * 常见 HTTP 状态到平台业务码的固定映射。
  *
