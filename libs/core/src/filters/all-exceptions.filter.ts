@@ -4,7 +4,12 @@ import type { ApiErrorResponse, FieldError } from '../interfaces/index.js';
 import { Catch, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 
-import { BUSINESS_CODE, DEFAULT_BUSINESS_MESSAGE, httpStatusToBusinessCode } from '../constants/index.js';
+import {
+  BUSINESS_CODE,
+  DEFAULT_BUSINESS_MESSAGE,
+  httpStatusToBusinessCode,
+  prismaCodeToHttpStatus,
+} from '../constants/index.js';
 import { BusinessException } from '../exceptions/index.js';
 
 /** 只读取写响应所需的字段，避免绑定具体平台类型 */
@@ -31,7 +36,7 @@ interface ResolvedError {
  * 处理顺序：
  * 1. `BusinessException`：保留业务码、HTTP 状态与受控的字段错误；
  * 2. 其他 `HttpException`：保留 HTTP 状态，映射为平台业务码，只提取公开提示；
- * 3. 未知错误或非 Error 抛出值：统一 500 / 50000，对外固定安全提示。
+ * 3. 未知错误或非 Error 抛出值：统一 500，对外固定安全提示。
  *
  * 响应通过 `HttpAdapterHost` 写回，不依赖 Express 或 Fastify 的专用 API；
  * 响应头已发送时不再尝试写 JSON，避免二次发送导致连接异常。
@@ -77,6 +82,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
       return this.resolveHttpException(exception);
     }
 
+    const prismaCode = this.prismaCodeOf(exception);
+    if (prismaCode !== undefined) {
+      const status = prismaCodeToHttpStatus(prismaCode);
+      const code = httpStatusToBusinessCode(status);
+
+      return {
+        status,
+        body: this.errorBody(code, this.defaultMessageOf(code)),
+        cause: exception,
+      };
+    }
+
     return {
       status: HttpStatus.INTERNAL_SERVER_ERROR,
       body: this.errorBody(
@@ -85,6 +102,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
       ),
       cause: exception,
     };
+  }
+
+  private prismaCodeOf(exception: unknown): string | undefined {
+    if (exception === null || typeof exception !== 'object') return undefined;
+
+    const code = (exception as { code?: unknown }).code;
+    return typeof code === 'string' && /^P\d{4}$/.test(code) ? code : undefined;
   }
 
   private resolveHttpException(exception: HttpException): ResolvedError {

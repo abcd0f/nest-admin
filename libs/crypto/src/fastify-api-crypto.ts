@@ -33,7 +33,7 @@ export function installApiCryptoHooks(
     } catch (error) {
       const tooLarge = error instanceof Error && error.message === 'body too large';
       reply.code(tooLarge ? 413 : 400).type('application/json; charset=utf-8').send({
-        code: tooLarge ? 41300 : 40000,
+        code: tooLarge ? 413 : 400,
         data: null,
         message: tooLarge ? '请求体过大' : '加密请求无效',
       });

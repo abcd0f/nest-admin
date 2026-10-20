@@ -1,7 +1,7 @@
 import { HttpStatus } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
 
-import { BUSINESS_CODE } from '../constants/index.js';
+import { BUSINESS_CODE, httpStatusToBusinessCode, prismaCodeToHttpStatus } from '../constants/index.js';
 import { BusinessException } from './business.exception.js';
 
 describe('业务异常', () => {
@@ -29,7 +29,7 @@ describe('业务异常', () => {
     expect(exception.cause).toBe(cause);
   });
 
-  it('校验失败工厂返回 422 / 42200 与字段错误', () => {
+  it('校验失败工厂返回标准 HTTP 422 与字段错误', () => {
     const errors = [{ field: 'items.0.name', messages: ['name should not be empty'] }];
     const exception = BusinessException.validation(errors);
 
@@ -44,5 +44,13 @@ describe('业务异常', () => {
       message: '不该出现',
       status: HttpStatus.BAD_REQUEST,
     })).toThrow('业务异常的业务码不能为 0');
+  });
+
+  it('通用业务码与 HTTP 状态码一致，并为 Prisma 错误提供标准状态映射', () => {
+    expect(httpStatusToBusinessCode(HttpStatus.NOT_FOUND)).toBe(HttpStatus.NOT_FOUND);
+    expect(prismaCodeToHttpStatus('P2002')).toBe(HttpStatus.CONFLICT);
+    expect(prismaCodeToHttpStatus('P2025')).toBe(HttpStatus.NOT_FOUND);
+    expect(prismaCodeToHttpStatus('P2024')).toBe(HttpStatus.SERVICE_UNAVAILABLE);
+    expect(prismaCodeToHttpStatus('P2999')).toBe(HttpStatus.INTERNAL_SERVER_ERROR);
   });
 });

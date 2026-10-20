@@ -69,7 +69,7 @@ export class BusinessException extends HttpException {
   }
 
   /**
-   * 构造参数校验失败异常（HTTP 422 / 42200）。
+   * 构造参数校验失败异常（HTTP 422）。
    *
    * 供全局校验管道在把 class-validator 的错误树拍平成 `FieldError[]` 后调用，
    * 避免过滤器重新理解 class-validator 的树结构。

@@ -3,30 +3,30 @@ import { HttpStatus } from '@nestjs/common';
 /**
  * 平台通用业务码。
  *
- * HTTP 状态描述协议层结果，业务码描述应用层原因，两者互不替代。
+ * 通用业务码直接采用 HTTP 状态码，便于与协议层状态保持一致。
  * 业务模块的专属错误码从 100001 起按模块分配代码段，不要往这里加。
  */
 export const BUSINESS_CODE = {
   /** 成功 */
   SUCCESS: 0,
   /** 请求不合法 */
-  BAD_REQUEST: 40000,
+  BAD_REQUEST: HttpStatus.BAD_REQUEST,
   /** 未认证 */
-  UNAUTHORIZED: 40100,
+  UNAUTHORIZED: HttpStatus.UNAUTHORIZED,
   /** 无访问权限 */
-  FORBIDDEN: 40300,
+  FORBIDDEN: HttpStatus.FORBIDDEN,
   /** 资源不存在 */
-  NOT_FOUND: 40400,
+  NOT_FOUND: HttpStatus.NOT_FOUND,
   /** 资源冲突 */
-  CONFLICT: 40900,
+  CONFLICT: HttpStatus.CONFLICT,
   /** 参数校验失败 */
-  VALIDATION_FAILED: 42200,
+  VALIDATION_FAILED: HttpStatus.UNPROCESSABLE_ENTITY,
   /** 请求过于频繁 */
-  TOO_MANY_REQUESTS: 42900,
+  TOO_MANY_REQUESTS: HttpStatus.TOO_MANY_REQUESTS,
   /** 系统内部错误 */
-  INTERNAL_ERROR: 50000,
+  INTERNAL_ERROR: HttpStatus.INTERNAL_SERVER_ERROR,
   /** 服务不可用 */
-  SERVICE_UNAVAILABLE: 50300,
+  SERVICE_UNAVAILABLE: HttpStatus.SERVICE_UNAVAILABLE,
   /** 通用业务失败 */
   BUSINESS_FAILURE: 100000,
 } as const;
@@ -65,7 +65,7 @@ export function resultCodeMessage(code: number): string {
 /**
  * 常见 HTTP 状态到平台业务码的固定映射。
  *
- * 未列出的状态走 `HTTP 状态 * 100`，保证映射稳定且落在平台区间（40000–59999）。
+ * 未列出的状态码直接使用 HTTP 状态码。
  */
 const HTTP_STATUS_BUSINESS_CODE: Readonly<Record<number, number>> = {
   [HttpStatus.BAD_REQUEST]: BUSINESS_CODE.BAD_REQUEST,
@@ -83,9 +83,38 @@ const HTTP_STATUS_BUSINESS_CODE: Readonly<Record<number, number>> = {
  * 把 HTTP 状态映射为业务码。
  *
  * @example
- * httpStatusToBusinessCode(404); // 40400
- * httpStatusToBusinessCode(502); // 50200
+ * httpStatusToBusinessCode(404); // 404
+ * httpStatusToBusinessCode(502); // 502
  */
 export function httpStatusToBusinessCode(status: number): number {
-  return HTTP_STATUS_BUSINESS_CODE[status] ?? status * 100;
+  return HTTP_STATUS_BUSINESS_CODE[status] ?? status;
+}
+
+/** Prisma 已知请求错误对应的 HTTP 状态。未列出的 Prisma 错误按 500 处理。 */
+export const PRISMA_ERROR_HTTP_STATUS: Readonly<Record<string, HttpStatus>> = {
+  P2000: HttpStatus.UNPROCESSABLE_ENTITY,
+  P2002: HttpStatus.CONFLICT,
+  P2003: HttpStatus.CONFLICT,
+  P2004: HttpStatus.BAD_REQUEST,
+  P2005: HttpStatus.UNPROCESSABLE_ENTITY,
+  P2006: HttpStatus.UNPROCESSABLE_ENTITY,
+  P2007: HttpStatus.UNPROCESSABLE_ENTITY,
+  P2011: HttpStatus.UNPROCESSABLE_ENTITY,
+  P2012: HttpStatus.UNPROCESSABLE_ENTITY,
+  P2013: HttpStatus.UNPROCESSABLE_ENTITY,
+  P2014: HttpStatus.CONFLICT,
+  P2015: HttpStatus.NOT_FOUND,
+  P2016: HttpStatus.BAD_REQUEST,
+  P2017: HttpStatus.CONFLICT,
+  P2018: HttpStatus.NOT_FOUND,
+  P2019: HttpStatus.UNPROCESSABLE_ENTITY,
+  P2020: HttpStatus.UNPROCESSABLE_ENTITY,
+  P2024: HttpStatus.SERVICE_UNAVAILABLE,
+  P2025: HttpStatus.NOT_FOUND,
+  P2034: HttpStatus.CONFLICT,
+};
+
+/** 将 Prisma 请求错误码映射为 HTTP 状态，未知错误安全回落到 500。 */
+export function prismaCodeToHttpStatus(code: string): HttpStatus {
+  return PRISMA_ERROR_HTTP_STATUS[code] ?? HttpStatus.INTERNAL_SERVER_ERROR;
 }

@@ -161,7 +161,7 @@ export class ExampleController {
 超限返回 HTTP `429` 和统一错误体：
 
 ```json
-{ "code": 42900, "data": null, "message": "请求过于频繁" }
+{ "code": 429, "data": null, "message": "请求过于频繁" }
 ```
 
 允许的请求带有 `X-RateLimit-Limit`、`X-RateLimit-Remaining`、`X-RateLimit-Reset` 响应头；拒绝的请求带有 `Retry-After`。时间响应头使用秒。

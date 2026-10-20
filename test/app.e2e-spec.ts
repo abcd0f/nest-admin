@@ -38,6 +38,16 @@ class LogProbeController {
   failure(): never {
     throw new Error('probe-failure');
   }
+
+  @Get('prisma-conflict')
+  prismaConflict(): never {
+    throw Object.assign(new Error('database detail'), { code: 'P2002' });
+  }
+
+  @Get('prisma-missing')
+  prismaMissing(): never {
+    throw Object.assign(new Error('database detail'), { code: 'P2025' });
+  }
 }
 
 interface HttpLogRecord {
@@ -148,5 +158,17 @@ describe('Gateway Fastify 日志链路 (e2e)', () => {
       expect(access).toHaveLength(1);
       expect(access[0].level).toBe(40);
     });
+  });
+
+  it('Prisma 唯一约束和记录不存在分别映射为 HTTP 409 和 404', async () => {
+    const conflict = await app.inject({ method: 'GET', url: '/api/log-probe/prisma-conflict' });
+    const missing = await app.inject({ method: 'GET', url: '/api/log-probe/prisma-missing' });
+
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.json()).toMatchObject({ code: 409, data: null, message: '资源冲突' });
+    expect(missing.statusCode).toBe(404);
+    expect(missing.json()).toMatchObject({ code: 404, data: null, message: '资源不存在' });
+    expect(conflict.body).not.toContain('database detail');
+    expect(missing.body).not.toContain('database detail');
   });
 });

@@ -119,7 +119,7 @@ describe('API AES/RSA 加密 (e2e)', () => {
       payload: { message: 'plain text' },
     });
     expect(missingHeader.statusCode).toBe(403);
-    expect(missingHeader.json().code).toBe(40300);
+    expect(missingHeader.json().code).toBe(403);
   });
 
   it('encrypts the unified response when response: true is declared', async () => {
@@ -140,7 +140,7 @@ describe('API AES/RSA 加密 (e2e)', () => {
       errorResponse.body,
       errorResponse.headers['encrypt-key'] as string,
       config.privateKey!,
-    ))).toMatchObject({ code: 40000, data: null, message: 'invalid operation' });
+    ))).toMatchObject({ code: 400, data: null, message: 'invalid operation' });
   });
 
   it('leaves unannotated routes compatible with plain JSON requests', async () => {
@@ -161,6 +161,6 @@ describe('API AES/RSA 加密 (e2e)', () => {
       payload: 'invalid',
     });
     expect(response.statusCode).toBe(400);
-    expect(response.json()).toEqual({ code: 40000, data: null, message: '加密请求无效' });
+    expect(response.json()).toEqual({ code: 400, data: null, message: '加密请求无效' });
   });
 });
