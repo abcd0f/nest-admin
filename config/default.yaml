@@ -13,6 +13,17 @@ app:
   # 全局 API 前缀，例如 api 或 api/v1
   api-prefix: api
 
+api-decrypt:
+  # API 报文 AES/RSA 加解密总开关；开启后必须配置密钥
+  enabled: false
+  # RSA 加密临时 AES 密钥时使用的请求/响应头
+  header-flag: encrypt-key
+  # RSA 私钥用于解开客户端请求头携带的临时 AES 密钥
+  # 公私钥仅放入 config/<环境>.local.yaml 或部署密钥挂载，不要提交真实密钥
+  # private-key:
+  # RSA 公钥用于响应加密时封装临时 AES 密钥
+  # public-key:
+
 redis:
   # 渐进接入：默认不缓存，也不创建 Redis 连接；启用后 Redis 连接失败将阻止启动
   enabled: false

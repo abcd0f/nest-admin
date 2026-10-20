@@ -168,6 +168,26 @@ export class ExampleController {
 
 客户端身份沿用 Fastify `request.ip`。当前适配器已启用 `trustProxy: true`，通过反向代理部署时，代理需可靠覆盖客户端传入的转发头，保证限流使用正确的客户端地址。
 
+## API AES/RSA 加密
+
+网关支持与 RuoYi-Vue-Plus `api-decrypt` 兼容的 AES/RSA 报文格式。默认关闭；启用时需在 `config/<环境>.local.yaml` 或部署密钥挂载中配置 RSA 私钥和公钥：
+
+```yaml
+api-decrypt:
+  enabled: true
+  header-flag: encrypt-key
+  private-key: <PKCS8 RSA 私钥 Base64>
+  public-key: <SPKI RSA 公钥 Base64>
+```
+
+请求方生成临时 16、24 或 32 字节 AES 密钥，以 Base64 编码后用 RSA 公钥加密，并放入 `encrypt-key` 请求头；请求正文使用 AES-ECB/PKCS 填充加密为 Base64。服务端先用 RSA 私钥解开请求头，再解密正文。RSA 使用 PKCS#1 v1.5 填充。
+
+控制器方法使用 `@ApiEncrypt()` 要求 `POST` / `PUT` 请求必须加密；其他路由可继续发送普通请求，也会在请求头存在时尝试解密。`@ApiEncrypt({ response: true })` 额外加密该路由的统一响应（包括统一异常响应）：响应正文为 AES 密文，响应头使用同名 header 携带由 RSA 公钥封装的临时 AES 密钥。客户端需要读取该响应头并用对应 RSA 私钥解密响应正文。加密响应适用于普通文本/JSON 响应，不用于流式或文件下载。
+
+启用后 RSA 公私钥必须是相互匹配的一对。密钥不得提交到版本库或写入入库的环境配置文件；请求/响应密文使用 Base64 编码。
+
+共享 `CryptoModule` 也提供 `PasswordHashService`，供业务服务在创建凭据时调用 `hashPassword(password)`，在验证凭据时调用 `verifyPassword(encodedHash, password)`。它使用 Argon2id 并返回包含随机 salt 和参数的 PHC 字符串，数据库只需保存该字符串；密码哈希不复用 API 报文加密密钥。
+
 ## Redis 缓存
 
 `@app/cache` 已接入网关，默认关闭缓存，不要求本机运行 Redis。开关、默认 TTL 和连接选项统一放在 `redis` 下，配置沿用现有分层 YAML。在 `config/development.local.yaml` 中覆盖以下配置，确保 Redis 已运行，再执行 `pnpm start:dev`：

@@ -1,3 +1,4 @@
+import { apiDecryptConfig, apiDecryptDomain } from './api-decrypt.domain.js';
 import { appConfig, appDomain } from './app.domain.js';
 import { databaseConfig, databaseDomain } from './database.domain.js';
 import { loggerConfig, loggerDomain } from './logger.domain.js';
@@ -17,6 +18,7 @@ import { throttlerConfig, throttlerDomain } from './throttler.domain.js';
  */
 export const DOMAINS = [
   appDomain,
+  apiDecryptDomain,
   loggerDomain,
   swaggerDomain,
   throttlerDomain,
@@ -24,8 +26,9 @@ export const DOMAINS = [
   redisDomain,
 ] as const;
 
-export { appConfig, databaseConfig, loggerConfig, redisConfig, swaggerConfig, throttlerConfig };
+export { apiDecryptConfig, appConfig, databaseConfig, loggerConfig, redisConfig, swaggerConfig, throttlerConfig };
 
+export type { ApiDecryptConfig } from './api-decrypt.domain.js';
 export type { AppConfig, NodeEnv } from './app.domain.js';
 export type { DatabaseConfig, DatabasePoolConfig } from './database.domain.js';
 export type { LoggerConfig } from './logger.domain.js';

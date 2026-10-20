@@ -32,6 +32,15 @@
         "tsConfigPath": "libs/cache/tsconfig.lib.json"
       }
     },
+    "crypto": {
+      "type": "library",
+      "root": "libs/crypto",
+      "entryFile": "index",
+      "sourceRoot": "libs/crypto/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/crypto/tsconfig.lib.json"
+      }
+    },
     "common": {
       "type": "library",
       "root": "libs/common",
