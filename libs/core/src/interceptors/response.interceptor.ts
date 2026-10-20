@@ -2,7 +2,9 @@ import type { CallHandler, ExecutionContext, NestInterceptor } from '@nestjs/com
 import type { Observable } from 'rxjs';
 import type { ApiSuccessResponse } from '../interfaces/index.js';
 import { Injectable } from '@nestjs/common';
+import { SSE_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
+import { instanceToPlain } from 'class-transformer';
 
 import { map } from 'rxjs';
 import { BUSINESS_CODE, resultCodeMessage } from '../constants/index.js';
@@ -25,6 +27,17 @@ export class ResponseInterceptor<T> implements NestInterceptor<
     context: ExecutionContext,
     next: CallHandler<T>,
   ): Observable<ApiSuccessResponse<T | null> | T> {
+    const isWebSocket = context.getType() === 'ws';
+    const isSse = this.reflector.getAllAndOverride<boolean>(SSE_METADATA, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
+    // WebSocket messages and SSE events have their own wire format and lifecycle.
+    if (isWebSocket || isSse) {
+      return next.handle();
+    }
+
     const skipWrap = this.reflector.getAllAndOverride<boolean>(SKIP_RESPONSE_WRAP, [
       context.getHandler(),
       context.getClass(),
@@ -39,7 +52,9 @@ export class ResponseInterceptor<T> implements NestInterceptor<
     return next.handle().pipe(
       map((data) => ({
         code,
-        data: data ?? null,
+        data: data === null || data === undefined
+          ? null
+          : (instanceToPlain(data) as unknown as T),
         message: resultCodeMessage(code),
       })),
     );

@@ -1,8 +1,18 @@
 import type { ApiDecryptConfig } from '@app/config';
 import { constants, createCipheriv, createDecipheriv, generateKeyPairSync, privateDecrypt, publicEncrypt } from 'node:crypto';
+import { instanceToPlain, plainToInstance } from 'class-transformer';
 
 import { describe, expect, it } from 'vitest';
 import { ApiCryptoService } from './api-crypto.service.js';
+import { DecryptField, EncryptField } from './field-crypto.decorator.js';
+
+class FieldCryptoDto {
+  @EncryptField()
+  @DecryptField()
+  secret!: string;
+
+  visible!: string;
+}
 
 function createConfig(): ApiDecryptConfig {
   const keys = generateKeyPairSync('rsa', {
@@ -34,6 +44,14 @@ function encryptRequest(plainBody: string, publicKey: string) {
 }
 
 describe('apiCryptoService', () => {
+  it('encrypts and decrypts only decorated fields during DTO conversion', () => {
+    const dto = plainToInstance(FieldCryptoDto, { secret: 'private value', visible: 'unchanged' });
+    const encrypted = instanceToPlain(dto);
+    expect(encrypted.secret).toMatch(/^enc:v1:/);
+    expect(encrypted.visible).toBe('unchanged');
+    expect(plainToInstance(FieldCryptoDto, encrypted).secret).toBe('private value');
+  });
+
   it('decrypts the RSA-wrapped AES request format and encrypts compatible responses', () => {
     const config = createConfig();
     const service = new ApiCryptoService(config);

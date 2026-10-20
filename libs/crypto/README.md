@@ -13,6 +13,72 @@ API 报文加密只支持 AES 与 RSA，不支持 SM2。密码哈希与 API 加�
 
 API 请求/响应加密依赖 Fastify hooks 在请求体解析前解密密文。导入 `CryptoModule` 后，模块会在 Nest 应用启动阶段自动将 hooks 安装到 Fastify adapter；业务入口无需单独调用安装函数。加密启用时必须使用 Fastify HTTP adapter。
 
+## DTO 字段级加密和解密
+
+`@EncryptField()` 和 `@DecryptField()` 是针对单个 DTO 属性的 class-transformer 装饰器，使用 AES-256-GCM。字段密钥统一从 `@app/core` 的 `FIELD_ENCRYPTION_KEY` 常量读取，无需在每个 DTO 字段上重复传入。它们与 `@ApiEncrypt` 的整包 API 报文加密互相独立：`@ApiEncrypt` 不会触发字段转换，也不会改变字段加密算法。
+
+### DTO 声明
+
+同一个字段同时标记两个装饰器时，入站密文在 `plainToInstance` 阶段解密，DTO 输出到普通对象时在 `instanceToPlain` 阶段加密。密钥常量定义在 `libs/core/src/constants/field-encryption.ts`，统一由 `libs/core/src/constants/index.ts` 导出。
+
+```ts
+import { DecryptField, EncryptField } from '@app/crypto';
+import { Expose } from 'class-transformer';
+
+export class UserDto {
+  @Expose()
+  @EncryptField()
+  @DecryptField()
+  phoneNumber!: string;
+}
+```
+
+`EncryptField` 和 `DecryptField` 也可以单独使用：只需写出密文时使用 `@EncryptField`；只需接收并还原密文时使用 `@DecryptField`。
+
+### 请求入参解密
+
+装饰器在 `plainToInstance` 时执行。Nest 的 `@Body()` 默认不会自动将请求对象转换成此 DTO，因此需要显式转换，或在项目的验证管道中启用对应的 class-transformer 转换：
+
+```ts
+import { plainToInstance } from 'class-transformer';
+
+@Post()
+create(@Body() body: Record<string, unknown>) {
+  const dto = plainToInstance(UserDto, body);
+  return this.userService.create(dto);
+}
+```
+
+如果客户端提交 `phoneNumber` 的字段密文，转换后的 `dto.phoneNumber` 是明文，可继续交给业务逻辑处理。客户端提交明文时，`@DecryptField` 会原样保留该值；需要强制只接受密文时，应另外增加格式校验。
+
+### 响应出参加密
+
+响应中返回 DTO 实例时，项目的统一响应拦截器会调用 `instanceToPlain`，因此 `@EncryptField` 会在 JSON 响应序列化前执行：
+
+```ts
+@Get(':id')
+async findOne(@Param('id') id: string) {
+  const user = await this.userService.findOne(id);
+  return plainToInstance(UserDto, user);
+}
+```
+
+转换后的 JSON 中 `phoneNumber` 为密文。若在拦截器外自行构造响应，需手动调用 `instanceToPlain(dto)` 才会触发 `@EncryptField`。
+
+### 密文格式与行为
+
+密文格式如下，nonce、认证标签和密文正文均为 Base64：
+
+```text
+enc:v1:<nonce>:<tag>:<ciphertext>
+```
+
+每次加密都会生成新的随机 12 字节 nonce；AES-GCM 使用 16 字节认证标签校验数据完整性。相同明文多次加密会得到不同密文，这是预期行为。`@EncryptField` 遇到已有 `enc:v1:` 前缀的值会原样返回，避免重复加密；空值、非字符串值原样保留。`@DecryptField` 遇到没有该前缀的值会原样返回；密钥错误、格式无效或密文被篡改时会抛出错误。
+
+AES-GCM 是可逆加密，不是密码哈希。Argon2 适合密码校验，不能解密还原字段值。不要固定或复用 nonce，也不要把字段密钥与 API 报文中每次请求生成的临时 AES 密钥混用。字段加密也不替代 HTTPS、访问控制或密钥轮换策略。
+
+`FIELD_ENCRYPTION_KEY` 放在源码常量中便于统一引用，但源码常量不是安全的密钥存储：任何能读取构建产物或仓库的人都能取得它。当前常量值仅用于开发默认值；部署生产环境前必须将其替换为通过密钥管理系统注入的密钥，并做好密钥轮换和旧数据迁移安排。
+
 ```ts
 import { CryptoModule } from '@app/crypto';
 import { Module } from '@nestjs/common';
