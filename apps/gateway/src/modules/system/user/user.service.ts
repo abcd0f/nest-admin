@@ -2,9 +2,9 @@ import { toDtoList } from '@app/common';
 import { paginate, PrismaService } from '@app/database';
 import { Injectable } from '@nestjs/common';
 
-import { UpdateUserDto } from './dto/response.dto.js';
+import { ResponseUserDto } from './dto/response.dto.js';
 
-import { CreateUserDto } from './dto/user.dto.js';
+import { CreateUserDto, UpdateUserDto } from './dto/user.dto.js';
 
 @Injectable()
 export class UserService {
@@ -16,7 +16,7 @@ export class UserService {
 
   async findAll() {
     const data = await paginate(this.prisma.user, { page: 1, pageSize: 10 });
-    return toDtoList(UpdateUserDto, data);
+    return toDtoList(ResponseUserDto, data);
   }
 
   findOne(id: number) {

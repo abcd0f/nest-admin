@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
-import { UpdateUserDto } from './dto/response.dto.js';
-import { CreateUserDto } from './dto/user.dto.js';
+import {} from './dto/response.dto.js';
+import { CreateUserDto, UpdateUserDto } from './dto/user.dto.js';
 import { UserService } from './user.service.js';
 
 /**
@@ -13,7 +13,6 @@ export class UserController {
   /**
    * 创建用户
    * @param createUserDto
-   * @returns
    */
   @Post()
   create(@Body() createUserDto: CreateUserDto) {
