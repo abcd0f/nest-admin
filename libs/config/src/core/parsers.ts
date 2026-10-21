@@ -60,6 +60,35 @@ export function asInteger(value: unknown, path: string, fallback: number | undef
   return result;
 }
 
+function assertNumericInput(value: unknown, path: string, reason: string): void {
+  if (!isAbsent(value) && typeof value !== 'number' && typeof value !== 'string') {
+    fail(path, reason);
+  }
+}
+
+/** 拒绝隐式类型和空白字符串；仅指定 max 时检查安全整数与上限。 */
+export function asStrictInteger(
+  value: unknown,
+  path: string,
+  fallback: number | undefined,
+  min: number,
+  max?: number,
+): number {
+  assertNumericInput(value, path, '必须是整数');
+  if (typeof value === 'string' && value.trim().length === 0) fail(path, '必须是整数');
+  const result = asInteger(value, path, fallback, min);
+  if (max !== undefined && (!Number.isSafeInteger(result) || result > max)) {
+    fail(path, `必须小于等于 ${max}`);
+  }
+  return result;
+}
+
+/** 保留正整数配置原有的类型提示和下限校验语义。 */
+export function asPositiveInteger(value: unknown, path: string, fallback: number): number {
+  assertNumericInput(value, path, '必须是正整数');
+  return asInteger(value, path, fallback, 1);
+}
+
 export function asEnum<TValue extends string>(
   value: unknown,
   path: string,

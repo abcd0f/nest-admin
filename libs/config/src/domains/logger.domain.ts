@@ -1,4 +1,4 @@
-import { asBoolean, asEnum, asInteger, asObject, defineConfigDomain } from '../core/index.js';
+import { asBoolean, asEnum, asObject, asPositiveInteger, defineConfigDomain } from '../core/index.js';
 
 const LOG_LEVELS = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'] as const;
 const ROLL_FREQUENCIES = ['hourly', 'daily', 'weekly'] as const;
@@ -13,13 +13,6 @@ export interface LoggerConfig {
     frequency: (typeof ROLL_FREQUENCIES)[number];
     maxFiles: number;
   };
-}
-
-function positiveInteger(value: unknown, path: string, fallback: number): number {
-  if (value != null && typeof value !== 'number' && typeof value !== 'string') {
-    throw new Error(`${path}: 必须是正整数`);
-  }
-  return asInteger(value, path, fallback, 1);
 }
 
 export const loggerDomain = defineConfigDomain<LoggerConfig>({
@@ -42,9 +35,9 @@ export const loggerDomain = defineConfigDomain<LoggerConfig>({
       file: {
         enabled: asBoolean(file.enabled, 'logger.file.enabled', true),
         directory: directory.trim(),
-        sizeMb: positiveInteger(file['size-mb'], 'logger.file.size-mb', 20),
+        sizeMb: asPositiveInteger(file['size-mb'], 'logger.file.size-mb', 20),
         frequency: asEnum(file.frequency, 'logger.file.frequency', ROLL_FREQUENCIES, 'daily'),
-        maxFiles: positiveInteger(file['max-files'], 'logger.file.max-files', 15),
+        maxFiles: asPositiveInteger(file['max-files'], 'logger.file.max-files', 15),
       },
     };
 

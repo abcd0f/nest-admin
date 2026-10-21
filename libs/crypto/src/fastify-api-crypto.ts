@@ -2,6 +2,7 @@ import type { ApiDecryptConfig } from '@app/config';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 
 import { Readable } from 'node:stream';
+import { supportsEncryptedRequest } from './api-crypto-policy.js';
 import { ApiCryptoService } from './api-crypto.service.js';
 import { API_ENCRYPT_RESPONSE } from './api-encrypt.decorator.js';
 
@@ -18,9 +19,8 @@ export function installApiCryptoHooks(
   if (!config.enabled) return;
 
   fastify.addHook('preParsing', async (request, reply, payload) => {
-    const method = request.method.toUpperCase();
     const encryptedKey = request.headers[config.headerFlag.toLowerCase()];
-    if (!['POST', 'PUT'].includes(method) || typeof encryptedKey !== 'string' || !encryptedKey) {
+    if (!supportsEncryptedRequest(request.method) || typeof encryptedKey !== 'string' || !encryptedKey) {
       return payload;
     }
 

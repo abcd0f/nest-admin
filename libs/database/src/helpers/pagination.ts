@@ -1,4 +1,7 @@
 import type { PageQueryDto, PageResponseDto } from '@app/common';
+import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '@app/common/constants/pagination.js';
+
+export { DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '@app/common/constants/pagination.js';
 
 /** 分页入参由 PageQueryDto 完成 HTTP 字符串转换和校验 */
 export type PageQuery = Pick<PageQueryDto, 'page' | 'pageSize' | 'orderByColumn' | 'isAsc'>;
@@ -19,10 +22,6 @@ export interface PaginationParams<
   select?: Select;
   omit?: Omit;
 }
-
-export const DEFAULT_PAGE = 1;
-export const DEFAULT_PAGE_SIZE = 20;
-export const MAX_PAGE_SIZE = 200;
 
 function buildOrderBy(orderBy?: unknown): unknown {
   if (!orderBy) return { createTime: 'desc' };

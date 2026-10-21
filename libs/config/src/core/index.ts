@@ -8,6 +8,8 @@ export {
   asObject,
   asOptionalList,
   asOptionalString,
+  asPositiveInteger,
+  asStrictInteger,
   asString,
 } from './parsers.js';
 export { ENVIRONMENTS } from './types.js';

@@ -1,9 +1,9 @@
 import { REDIS_KEY_PREFIX_PATTERN } from '@app/core/constants/regex.js';
 import {
   asBoolean,
-  asInteger,
   asObject,
   asOptionalString,
+  asStrictInteger,
   defineConfigDomain,
 } from '../core/index.js';
 
@@ -31,16 +31,7 @@ function redisInteger(
   min: number,
   max = 2147483647,
 ): number {
-  if (
-    (value != null && typeof value !== 'number' && typeof value !== 'string') ||
-    (typeof value === 'string' && value.trim().length === 0)
-  ) {
-    throw new Error(`${path}: 必须是整数`);
-  }
-  const result = asInteger(value, path, fallback, min);
-  if (!Number.isSafeInteger(result) || result > max)
-    throw new Error(`${path}: 必须小于等于 ${max}`);
-  return result;
+  return asStrictInteger(value, path, fallback, min, max);
 }
 
 export const redisDomain = defineConfigDomain<RedisConfig>({

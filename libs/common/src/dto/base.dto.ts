@@ -1,6 +1,7 @@
 import { DateFormat } from '@app/core/decorators/index.js';
 import { Expose, Transform, Type } from 'class-transformer';
 import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '../constants/pagination.js';
 
 /**
  * 排序顺序
@@ -22,23 +23,21 @@ export class PageQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  page?: number = 1;
+  page?: number = DEFAULT_PAGE;
 
   /**
    * 页大小，缺省 20，上限 200；超出上限返回 422
    *
-   * 取值必须与 `@app/database` 的 `DEFAULT_PAGE_SIZE` / `MAX_PAGE_SIZE` 保持一致：
-   * DTO 负责「校验层」的严格约束（越界返回 422），`paginate()` 负责「兜底层」
-   * 的缺省与截断，两者数字一旦漂移就会出现「文档写 200、代码封顶 100」。
-   * 不在这里引常量是刻意为之——`common` 是比 `database` 更底层的库，不应反向依赖。
+   * 与 `paginate()` 共用 common 中的分页常量；DTO 负责严格校验，
+   * `paginate()` 负责内部调用的缺省与截断。
    * @example 20
    */
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(200)
-  pageSize?: number = 20;
+  @Max(MAX_PAGE_SIZE)
+  pageSize?: number = DEFAULT_PAGE_SIZE;
 
   /**
    * 排序字段

@@ -5,14 +5,14 @@ import { createFastifyAdapter } from '@app/common';
 import { apiDecryptConfig, AppConfigModule } from '@app/config';
 import { CoreModule } from '@app/core';
 import { ApiEncrypt, CryptoModule } from '@app/crypto';
-import { BadRequestException, Body, Controller, Get, Module, Post } from '@nestjs/common';
+import { All, BadRequestException, Body, Controller, Get, Module } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 @Controller('crypto-probe')
 class CryptoProbeController {
   @ApiEncrypt()
-  @Post('request')
+  @All('request')
   request(@Body() body: { message: string }) {
     return body;
   }
@@ -29,7 +29,7 @@ class CryptoProbeController {
     throw new BadRequestException('invalid operation');
   }
 
-  @Post('plain')
+  @All('plain')
   plain(@Body() body: { message: string }) {
     return body;
   }
@@ -102,19 +102,19 @@ describe('API AES/RSA 加密 (e2e)', () => {
     await app?.close();
   });
 
-  it('decrypts request bodies before Fastify parses JSON and enforces @ApiEncrypt()', async () => {
+  it.each(['POST', 'PUT'] as const)('decrypts %s before JSON parsing and enforces @ApiEncrypt()', async (method) => {
     const encrypted = encryptRequest('{"message":"request secret"}', config.publicKey!);
     const response = await app.inject({
-      method: 'POST',
+      method,
       url: '/api/crypto-probe/request',
       headers: { 'content-type': 'text/plain', 'encrypt-key': encrypted.encryptedKey },
       payload: encrypted.encryptedBody,
     });
-    expect(response.statusCode).toBe(201);
+    expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ code: 0, data: { message: 'request secret' }, message: '操作成功' });
 
     const missingHeader = await app.inject({
-      method: 'POST',
+      method,
       url: '/api/crypto-probe/request',
       payload: { message: 'plain text' },
     });
@@ -143,14 +143,39 @@ describe('API AES/RSA 加密 (e2e)', () => {
     ))).toMatchObject({ code: 400, data: null, message: 'invalid operation' });
   });
 
-  it('leaves unannotated routes compatible with plain JSON requests', async () => {
+  it.each(['POST', 'PUT'] as const)('leaves unannotated %s routes compatible with plain JSON and encrypted requests', async (method) => {
     const response = await app.inject({
-      method: 'POST',
+      method,
       url: '/api/crypto-probe/plain',
       payload: { message: 'plain request' },
     });
-    expect(response.statusCode).toBe(201);
+    expect(response.statusCode).toBe(200);
     expect(response.json().data.message).toBe('plain request');
+
+    const encrypted = encryptRequest('{"message":"encrypted request"}', config.publicKey!);
+    const encryptedResponse = await app.inject({
+      method,
+      url: '/api/crypto-probe/plain',
+      headers: { 'content-type': 'text/plain', 'encrypt-key': encrypted.encryptedKey },
+      payload: encrypted.encryptedBody,
+    });
+    expect(encryptedResponse.statusCode).toBe(200);
+    expect(encryptedResponse.json().data.message).toBe('encrypted request');
+  });
+
+  it.each(['GET', 'DELETE', 'PATCH'] as const)('%s neither requires an encryption header nor decrypts the payload', async (method) => {
+    const plainResponse = await app.inject({ method, url: '/api/crypto-probe/request' });
+    expect(plainResponse.statusCode).toBe(200);
+
+    const response = await app.inject({
+      method,
+      url: '/api/crypto-probe/request',
+      headers: { 'content-type': 'text/plain', 'encrypt-key': 'invalid' },
+      payload: 'unchanged payload',
+    });
+    expect(response.statusCode).toBe(200);
+    // Fastify 不解析 GET 请求体，其他方法的明文保持原样。
+    expect(response.json().data).toBe(method === 'GET' ? null : 'unchanged payload');
   });
 
   it('rejects malformed encrypted requests with the standard error shape', async () => {

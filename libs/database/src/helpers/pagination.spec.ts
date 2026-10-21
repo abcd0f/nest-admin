@@ -39,6 +39,7 @@ describe('paginate', () => {
     { query: {}, total: 0, page: 1, pageSize: 20, totalPage: 0 },
     { query: { page: NaN, pageSize: -1 }, total: 40, page: 1, pageSize: 20, totalPage: 2 },
     { query: { page: 2, pageSize: 999999 }, total: 401, page: 2, pageSize: 200, totalPage: 3 },
+    { query: { pageSize: 201 }, total: 201, page: 1, pageSize: 200, totalPage: 2 },
     { query: { page: 5, pageSize: 10 }, total: 21, page: 5, pageSize: 10, totalPage: 3 },
   ])('按有效分页参数返回元数据：$query，total=$total', async ({ query, total, page, pageSize, totalPage }) => {
     const delegate = {

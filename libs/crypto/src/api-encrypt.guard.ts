@@ -5,6 +5,7 @@ import { apiDecryptConfig } from '@app/config';
 import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
 
 import { Reflector } from '@nestjs/core';
+import { supportsEncryptedRequest } from './api-crypto-policy.js';
 import { API_ENCRYPT_POLICY, API_ENCRYPT_RESPONSE } from './api-encrypt.decorator.js';
 
 @Injectable()
@@ -28,7 +29,7 @@ export class ApiEncryptGuard implements CanActivate {
       headers: Record<string, string | undefined>;
       [API_ENCRYPT_RESPONSE]?: boolean;
     }>();
-    if (['POST', 'PUT'].includes(request.method.toUpperCase())
+    if (supportsEncryptedRequest(request.method)
       && !request.headers[this.config.headerFlag.toLowerCase()]) {
       throw new ForbiddenException('此接口要求使用 AES/RSA 加密请求');
     }
