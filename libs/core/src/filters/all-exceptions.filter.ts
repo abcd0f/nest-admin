@@ -8,6 +8,7 @@ import {
   BUSINESS_CODE,
   DEFAULT_BUSINESS_MESSAGE,
   httpStatusToBusinessCode,
+  PRISMA_ERROR_CODE_PATTERN,
   prismaCodeToHttpStatus,
 } from '../constants/index.js';
 import { BusinessException } from '../exceptions/index.js';
@@ -108,7 +109,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     if (exception === null || typeof exception !== 'object') return undefined;
 
     const code = (exception as { code?: unknown }).code;
-    return typeof code === 'string' && /^P\d{4}$/.test(code) ? code : undefined;
+    return typeof code === 'string' && PRISMA_ERROR_CODE_PATTERN.test(code) ? code : undefined;
   }
 
   private resolveHttpException(exception: HttpException): ResolvedError {

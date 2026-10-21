@@ -5,6 +5,7 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { DIRECTORY_ERROR_PATTERN, LOG_DATE_PATTERN, LOGGER_TEST_SECRETS_PATTERN } from '@app/core/constants/regex.js';
 import pino from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loggerDomain } from '../../config/src/domains/logger.domain.js';
@@ -68,7 +69,7 @@ file: { directory, 'max-files': 100 },
     expect(errors.map(record => record.level)).toEqual([50, 60]);
     expect(errors[0].err?.stack).toContain('database unavailable');
     expect(errors[0].err?.cause?.message).toBe('connection refused');
-    expect(JSON.stringify(main)).not.toMatch(/root-secret|nested-secret/);
+    expect(JSON.stringify(main)).not.toMatch(LOGGER_TEST_SECRETS_PATTERN);
     expect(JSON.stringify(main)).toContain('[REDACTED]');
     expect((await readFile(join(directory, (await files('gateway'))[0]), 'utf8'))).not.toContain('\u001B[');
   });
@@ -150,7 +151,7 @@ file: { directory, 'max-files': 100 },
   it('文件目录不可用时，初始化明确失败', async () => {
     await writeFile(join(directory, 'blocked'), 'file');
     config.file.directory = join(directory, 'blocked', 'logs');
-    await expect(LoggerTransport.create(createTransportOptions(config))).rejects.toThrow(/ENOTDIR|EEXIST/);
+    await expect(LoggerTransport.create(createTransportOptions(config))).rejects.toThrow(DIRECTORY_ERROR_PATTERN);
   });
 
   it.each([true, false])('控制台 pretty=%s 实际输出正确格式', async (pretty) => {
@@ -171,7 +172,7 @@ file: { directory, 'max-files': 100 },
     expect(stdout).toContain('console-probe');
     if (pretty) {
       expect(stdout).toContain('\u001B[');
-      expect(stdout).toMatch(/\d{4}-\d{2}-\d{2}/);
+      expect(stdout).toMatch(LOG_DATE_PATTERN);
       expect(stdout).toContain('INFO');
     } else {
       expect(JSON.parse(stdout).level).toBe(30);

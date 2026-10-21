@@ -1,5 +1,6 @@
 import type { ApiDecryptConfig } from '@app/config';
 import { constants, createCipheriv, createDecipheriv, generateKeyPairSync, privateDecrypt, publicEncrypt } from 'node:crypto';
+import { FIELD_CIPHERTEXT_PREFIX_PATTERN } from '@app/core/constants/regex.js';
 import { instanceToPlain, plainToInstance } from 'class-transformer';
 
 import { describe, expect, it } from 'vitest';
@@ -47,7 +48,7 @@ describe('apiCryptoService', () => {
   it('encrypts and decrypts only decorated fields during DTO conversion', () => {
     const dto = plainToInstance(FieldCryptoDto, { secret: 'private value', visible: 'unchanged' });
     const encrypted = instanceToPlain(dto);
-    expect(encrypted.secret).toMatch(/^enc:v1:/);
+    expect(encrypted.secret).toMatch(FIELD_CIPHERTEXT_PREFIX_PATTERN);
     expect(encrypted.visible).toBe('unchanged');
     expect(plainToInstance(FieldCryptoDto, encrypted).secret).toBe('private value');
   });

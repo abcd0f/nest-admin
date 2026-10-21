@@ -4,6 +4,7 @@ import { createServer } from 'node:net';
 import { CacheService } from '@app/cache';
 import { createFastifyAdapter } from '@app/common';
 import { loggerConfig, redisConfig } from '@app/config';
+import { IPV6_HOST_BRACKETS_PATTERN } from '@app/core/constants/regex.js';
 import { Test } from '@nestjs/testing';
 import { Redis } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -30,7 +31,7 @@ function testConfig() {
     {
       enabled: true,
       ttl: 5000,
-      host: url.hostname.replace(/^\[|\]$/g, ''),
+      host: url.hostname.replace(IPV6_HOST_BRACKETS_PATTERN, ''),
       port: url.port || '6379',
       db: url.pathname.slice(1) || '0',
       'key-prefix': `test:${randomUUID()}`,

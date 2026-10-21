@@ -6,6 +6,7 @@ import { setImmediate } from 'node:timers/promises';
 import { createFastifyAdapter } from '@app/common';
 import { loggerConfig, redisConfig } from '@app/config';
 import { AllExceptionsFilter, RawResponse } from '@app/core';
+import { HTTP_LOG_TEST_SECRETS_PATTERN } from '@app/core/constants/regex.js';
 import { LoggerService, PinoLogger } from '@app/logger';
 import { BadRequestException, ConsoleLogger, Controller, Get, Inject, Logger, Post, Req } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -130,7 +131,7 @@ describe('Gateway Fastify 日志链路 (e2e)', () => {
         expect(access[0].responseTime).toBeTypeOf('number');
       }
       const content = JSON.stringify(logs);
-      expect(content).not.toMatch(/query-secret|header-secret|cookie-secret|body-secret|business-secret/);
+      expect(content).not.toMatch(HTTP_LOG_TEST_SECRETS_PATTERN);
     });
   });
 

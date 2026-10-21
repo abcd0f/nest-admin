@@ -1,3 +1,4 @@
+import { REDIS_KEY_PREFIX_PATTERN } from '@app/core/constants/regex.js';
 import {
   asBoolean,
   asInteger,
@@ -50,7 +51,7 @@ export const redisDomain = defineConfigDomain<RedisConfig>({
     const keyPrefix = value['key-prefix'] ?? 'nest-admin:cache';
     if (typeof host !== 'string' || host.trim().length === 0)
       throw new Error('redis.host: 必须是非空字符串');
-    if (typeof keyPrefix !== 'string' || !/^[\w-]+(?::[\w-]+)*$/.test(keyPrefix)) {
+    if (typeof keyPrefix !== 'string' || !REDIS_KEY_PREFIX_PATTERN.test(keyPrefix)) {
       throw new Error('redis.key-prefix: 必须由字母、数字、下划线、短横线及冒号分隔的非空段组成');
     }
     if (value.password != null && typeof value.password !== 'string') {

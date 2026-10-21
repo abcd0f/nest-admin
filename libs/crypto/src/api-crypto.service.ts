@@ -1,6 +1,7 @@
 import type { ApiDecryptConfig } from '@app/config';
 import { constants, createCipheriv, createDecipheriv, createPrivateKey, createPublicKey, privateDecrypt, publicEncrypt, randomBytes } from 'node:crypto';
 import { Readable } from 'node:stream';
+import { BASE64_PATTERN } from '@app/core/constants/regex.js';
 
 export interface EncryptedResponse {
   body: string;
@@ -8,7 +9,7 @@ export interface EncryptedResponse {
 }
 
 function decodeBase64(value: string): Buffer {
-  if (!/^(?:[A-Z0-9+/]{4})*(?:[A-Z0-9+/]{2}==|[A-Z0-9+/]{3}=)?$/i.test(value)) {
+  if (!BASE64_PATTERN.test(value)) {
     throw new Error('invalid base64');
   }
   return Buffer.from(value, 'base64');
