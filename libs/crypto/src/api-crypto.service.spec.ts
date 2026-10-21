@@ -52,16 +52,18 @@ describe('apiCryptoService', () => {
     expect(plainToInstance(FieldCryptoDto, encrypted).secret).toBe('private value');
   });
 
-  it('decrypts the RSA-wrapped AES request format and encrypts compatible responses', () => {
-    const config = createConfig();
+  it.each(['shared', 'separate'])('decrypts requests and encrypts responses with %s RSA key pairs', (keyMode) => {
+    const requestConfig = createConfig();
+    const responseConfig = keyMode === 'shared' ? requestConfig : createConfig();
+    const config = { ...requestConfig, publicKey: responseConfig.publicKey };
     const service = new ApiCryptoService(config);
-    const request = encryptRequest('{"message":"hello"}', config.publicKey!);
+    const request = encryptRequest('{"message":"hello"}', requestConfig.publicKey!);
     expect(service.decryptRequest(request.encryptedKey, request.encryptedBody).toString('utf8'))
       .toBe('{"message":"hello"}');
 
     const response = service.encryptResponse('{"code":0,"data":{"message":"hello"},"message":"操作成功"}');
     const encodedAesPassword = privateDecrypt(
-      { key: Buffer.from(config.privateKey!, 'base64'), format: 'der', type: 'pkcs8', padding: constants.RSA_PKCS1_PADDING },
+      { key: Buffer.from(responseConfig.privateKey!, 'base64'), format: 'der', type: 'pkcs8', padding: constants.RSA_PKCS1_PADDING },
       Buffer.from(response.encryptedKey, 'base64'),
     ).toString('utf8');
     const aesPassword = Buffer.from(encodedAesPassword, 'base64').toString('utf8');

@@ -184,7 +184,7 @@ api-decrypt:
 
 控制器方法使用 `@ApiEncrypt()` 要求 `POST` / `PUT` 请求必须加密；其他路由可继续发送普通请求，也会在请求头存在时尝试解密。`@ApiEncrypt({ response: true })` 额外加密该路由的统一响应（包括统一异常响应）：响应正文为 AES 密文，响应头使用同名 header 携带由 RSA 公钥封装的临时 AES 密钥。客户端需要读取该响应头并用对应 RSA 私钥解密响应正文。加密响应适用于普通文本/JSON 响应，不用于流式或文件下载。
 
-启用后 RSA 公私钥必须是相互匹配的一对。密钥不得提交到版本库或写入入库的环境配置文件；请求/响应密文使用 Base64 编码。
+启用后必须配置 RSA 请求解密私钥和响应加密公钥，两者可以来自不同密钥对：请求私钥须与客户端加密公钥配对，响应公钥须与客户端解密私钥配对。密钥不得提交到版本库或写入入库的环境配置文件；请求/响应密文使用 Base64 编码。
 
 共享 `CryptoModule` 也提供 `PasswordHashService`，供业务服务在创建凭据时调用 `hashPassword(password)`，在验证凭据时调用 `verifyPassword(encodedHash, password)`。它使用 Argon2id 并返回包含随机 salt 和参数的 PHC 字符串，数据库只需保存该字符串；密码哈希不复用 API 报文加密密钥。
 

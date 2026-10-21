@@ -15,14 +15,14 @@ app:
 
 api-decrypt:
   # API 报文 AES/RSA 加解密总开关；开启后必须配置密钥
-  enabled: false
+  enabled: true
   # RSA 加密临时 AES 密钥时使用的请求/响应头
   header-flag: encrypt-key
   # RSA 私钥用于解开客户端请求头携带的临时 AES 密钥
   # 公私钥仅放入 config/<环境>.local.yaml 或部署密钥挂载，不要提交真实密钥
-  # private-key:
+  private-key: MIIBVAIBADANBgkqhkiG9w0BAQEFAASCAT4wggE6AgEAAkEAqhHyZfSsYourNxaY7Nt+PrgrxkiA50efORdI5U5lsW79MmFnusUA355oaSXcLhu5xxB38SMSyP2KvuKNPuH3owIDAQABAkAfoiLyL+Z4lf4Myxk6xUDgLaWGximj20CUf+5BKKnlrK+Ed8gAkM0HqoTt2UZwA5E2MzS4EI2gjfQhz5X28uqxAiEA3wNFxfrCZlSZHb0gn2zDpWowcSxQAgiCstxGUoOqlW8CIQDDOerGKH5OmCJ4Z21v+F25WaHYPxCFMvwxpcw99EcvDQIgIdhDTIqD2jfYjPTY8Jj3EDGPbH2HHuffvflECt3Ek60CIQCFRlCkHpi7hthhYhovyloRYsM+IS9h/0BzlEAuO0ktMQIgSPT3aFAgJYwKpqRYKlLDVcflZFCKY7u3UP8iWi1Qw0Y=
   # RSA 公钥用于响应加密时封装临时 AES 密钥
-  # public-key:
+  public-key: MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAJnNwrj4hi/y3CCJu868ghCG5dUj8wZK++RNlTLcXoMmdZWEQ/u02RgD5LyLAXGjLOjbMtC+/J9qofpSGTKSx/MCAwEAAQ==
 
 redis:
   # 渐进接入：默认不缓存，也不创建 Redis 连接；启用后 Redis 连接失败将阻止启动

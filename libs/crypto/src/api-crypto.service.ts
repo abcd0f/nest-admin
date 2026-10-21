@@ -34,11 +34,6 @@ export class ApiCryptoService {
     if (config.enabled) {
       this.privateKey = keyObject(config.privateKey!, 'private');
       this.publicKey = keyObject(config.publicKey!, 'public');
-      if (!createPublicKey(this.privateKey).export({ type: 'spki', format: 'der' }).equals(
-        this.publicKey.export({ type: 'spki', format: 'der' }),
-      )) {
-        throw new Error('api-decrypt.public-key 与 private-key 不匹配');
-      }
     }
   }
 

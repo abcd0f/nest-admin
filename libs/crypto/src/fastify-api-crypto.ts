@@ -1,9 +1,11 @@
 import type { ApiDecryptConfig } from '@app/config';
-import type { FastifyInstance } from 'fastify';
+import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 
 import { Readable } from 'node:stream';
 import { ApiCryptoService } from './api-crypto.service.js';
 import { API_ENCRYPT_RESPONSE } from './api-encrypt.decorator.js';
+
+type FastifyInstance = ReturnType<ReturnType<NestFastifyApplication['getHttpAdapter']>['getInstance']>;
 
 const EMPTY_BODY = Readable.from([]);
 
@@ -32,11 +34,14 @@ export function installApiCryptoHooks(
       return clearPayload;
     } catch (error) {
       const tooLarge = error instanceof Error && error.message === 'body too large';
-      reply.code(tooLarge ? 413 : 400).type('application/json; charset=utf-8').send({
-        code: tooLarge ? 413 : 400,
-        data: null,
-        message: tooLarge ? '请求体过大' : '加密请求无效',
-      });
+      reply
+        .code(tooLarge ? 413 : 400)
+        .type('application/json; charset=utf-8')
+        .send({
+          code: tooLarge ? 413 : 400,
+          data: null,
+          message: tooLarge ? '请求体过大' : '加密请求无效',
+        });
       return EMPTY_BODY;
     }
   });
@@ -61,7 +66,7 @@ export function installApiCryptoHooks(
       'access-control-expose-headers',
       [...new Set(exposedHeaders.map((header) => header.trim()).filter(Boolean))].join(', '),
     );
-    reply.type('text/plain; charset=utf-8');
+    reply.type('application/json; charset=utf-8');
     return encrypted.body;
   });
 }
