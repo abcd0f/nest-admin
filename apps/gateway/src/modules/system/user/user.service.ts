@@ -1,4 +1,4 @@
-import { toDtoList } from '@app/common';
+import { toPageDto } from '@app/common';
 import { paginate, PrismaService } from '@app/database';
 import { Injectable } from '@nestjs/common';
 
@@ -16,7 +16,7 @@ export class UserService {
 
   async findAll() {
     const data = await paginate(this.prisma.user, { page: 1, pageSize: 10 });
-    return toDtoList(ResponseUserDto, data);
+    return toPageDto(ResponseUserDto, data);
   }
 
   findOne(id: number) {
