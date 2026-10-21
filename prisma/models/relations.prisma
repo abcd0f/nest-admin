@@ -1,0 +1,47 @@
+/// 用户与角色关联
+model UserRole {
+  userId BigInt @map("user_id")
+  roleId BigInt @map("role_id")
+  user   User   @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [roleId], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+  @@map("sys_user_role")
+}
+
+/// 用户与职位关联
+model UserPost {
+  userId BigInt @map("user_id")
+  postId BigInt @map("post_id")
+  user   User   @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  post   Post   @relation(fields: [postId], references: [postId], onDelete: Cascade)
+
+  @@id([userId, postId])
+  @@index([postId])
+  @@map("sys_user_post")
+}
+
+/// 角色与菜单关联
+model RoleMenu {
+  roleId BigInt @map("role_id")
+  menuId BigInt @map("menu_id")
+  role   Role   @relation(fields: [roleId], references: [roleId], onDelete: Cascade)
+  menu   Menu   @relation(fields: [menuId], references: [menuId], onDelete: Cascade)
+
+  @@id([roleId, menuId])
+  @@index([menuId])
+  @@map("sys_role_menu")
+}
+
+/// 自定义数据范围的角色与部门关联
+model RoleDept {
+  roleId BigInt @map("role_id")
+  deptId BigInt @map("dept_id")
+  role   Role   @relation(fields: [roleId], references: [roleId], onDelete: Cascade)
+  dept   Dept   @relation(fields: [deptId], references: [deptId], onDelete: Cascade)
+
+  @@id([roleId, deptId])
+  @@index([deptId])
+  @@map("sys_role_dept")
+}

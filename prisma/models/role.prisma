@@ -1,0 +1,33 @@
+/// 系统角色表
+model Role {
+  /// 角色ID
+  roleId     BigInt   @id @default(autoincrement()) @map("role_id")
+  /// 角色名称
+  roleName   String   @map("role_name") @db.VarChar(64)
+  /// 角色权限字符串
+  roleKey    String   @map("role_key") @db.VarChar(64)
+  /// 显示顺序
+  orderNum   Int      @default(0) @map("order_num")
+  /// 数据范围：1 全部、2 自定义、3 本部门、4 本部门及以下、5 本人、6 部门及以下或本人
+  dataScope  String   @default("5") @map("data_scope") @db.Char(1)
+  /// 角色状态
+  status     String   @default("0") @db.Char(1)
+  /// 删除标志
+  delFlag    String   @default("0") @map("del_flag") @db.Char(1)
+  /// 创建者
+  createBy   BigInt?  @map("create_by")
+  /// 创建时间
+  createTime DateTime @default(now()) @map("create_time") @db.Timestamptz(6)
+  /// 更新者
+  updateBy   BigInt?  @map("update_by")
+  /// 更新时间
+  updateTime DateTime? @map("update_time") @db.Timestamptz(6)
+  /// 备注
+  remark     String?  @db.VarChar(500)
+
+  users UserRole[]
+  menus RoleMenu[]
+  depts RoleDept[]
+
+  @@map("sys_role")
+}

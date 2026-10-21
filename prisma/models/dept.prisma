@@ -1,0 +1,36 @@
+/// 系统部门表
+model Dept {
+  /// 部门ID
+  deptId    BigInt   @id @default(autoincrement()) @map("dept_id")
+  /// 父部门ID，根节点为 0
+  parentId  BigInt   @default(0) @map("parent_id")
+  /// 含自身的物化路径
+  ancestors String   @default("/") @db.VarChar(512)
+  /// 部门名称
+  deptName  String   @map("dept_name") @db.VarChar(64)
+  /// 显示顺序
+  orderNum  Int      @default(0) @map("order_num")
+  /// 负责人用户ID
+  leaderId  BigInt?  @map("leader_id")
+  /// 部门状态
+  status    String   @default("0") @db.Char(1)
+  /// 删除标志
+  delFlag   String   @default("0") @map("del_flag") @db.Char(1)
+  /// 创建者
+  createBy  BigInt?  @map("create_by")
+  /// 创建时间
+  createTime DateTime @default(now()) @map("create_time") @db.Timestamptz(6)
+  /// 更新者
+  updateBy  BigInt?  @map("update_by")
+  /// 更新时间
+  updateTime DateTime? @map("update_time") @db.Timestamptz(6)
+  /// 备注
+  remark    String?  @db.VarChar(500)
+
+  users     User[]
+  roleDepts RoleDept[]
+
+  @@index([parentId])
+  @@index([ancestors])
+  @@map("sys_dept")
+}

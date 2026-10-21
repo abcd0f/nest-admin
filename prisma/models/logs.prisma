@@ -1,0 +1,53 @@
+/// 登录日志表
+model LoginLog {
+  /// 访问ID
+  infoId    BigInt   @id @default(autoincrement()) @map("info_id")
+  /// 登录账号
+  userName  String   @map("user_name") @db.VarChar(64)
+  /// 登录IP
+  ipaddr    String?  @db.VarChar(128)
+  /// 客户端标识
+  userAgent String?  @map("user_agent") @db.VarChar(500)
+  /// 登录状态：0 成功、1 失败
+  status    String   @default("0") @db.Char(1)
+  /// 提示消息
+  msg       String?  @db.VarChar(255)
+  /// 登录时间
+  loginTime DateTime @default(now()) @map("login_time") @db.Timestamptz(6)
+
+  @@index([userName])
+  @@index([loginTime])
+  @@map("sys_login_log")
+}
+
+/// 操作日志表
+model OperLog {
+  /// 操作日志ID
+  operId        BigInt   @id @default(autoincrement()) @map("oper_id")
+  /// 模块标题
+  title         String?  @db.VarChar(64)
+  /// 控制器方法
+  method        String?  @db.VarChar(200)
+  /// 请求方式
+  requestMethod String?  @map("request_method") @db.VarChar(10)
+  /// 操作人用户ID
+  operUserId    BigInt?  @map("oper_user_id")
+  /// 请求地址
+  operUrl       String?  @map("oper_url") @db.VarChar(255)
+  /// 操作IP
+  operIp        String?  @map("oper_ip") @db.VarChar(128)
+  /// 脱敏后的请求参数
+  operParam     String?  @map("oper_param") @db.Text
+  /// 操作状态：0 成功、1 失败
+  status        String   @default("0") @db.Char(1)
+  /// 错误消息
+  errorMsg      String?  @map("error_msg") @db.Text
+  /// 耗时（毫秒）
+  costTime      Int      @default(0) @map("cost_time")
+  /// 操作时间
+  operTime      DateTime @default(now()) @map("oper_time") @db.Timestamptz(6)
+
+  @@index([operUserId])
+  @@index([operTime])
+  @@map("sys_oper_log")
+}

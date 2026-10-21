@@ -1,0 +1,46 @@
+/// 系统菜单表
+model Menu {
+  /// 菜单ID
+  menuId     BigInt   @id @default(autoincrement()) @map("menu_id")
+  /// 父菜单ID，根节点为 0
+  parentId   BigInt   @default(0) @map("parent_id")
+  /// 菜单名称
+  menuName   String   @map("menu_name") @db.VarChar(64)
+  /// 类型：M 目录、C 菜单、F 按钮
+  menuType   String   @map("menu_type") @db.Char(1)
+  /// 显示顺序
+  orderNum   Int      @default(0) @map("order_num")
+  /// 路由地址
+  path       String?  @db.VarChar(200)
+  /// 前端组件路径
+  component  String?  @db.VarChar(255)
+  /// 路由参数
+  query      String?  @db.VarChar(255)
+  /// 是否外链：0 是、1 否
+  isFrame    String   @default("1") @map("is_frame") @db.Char(1)
+  /// 是否缓存：0 缓存、1 不缓存
+  isCache    String   @default("0") @map("is_cache") @db.Char(1)
+  /// 是否隐藏：0 显示、1 隐藏
+  visible    String   @default("0") @db.Char(1)
+  /// 菜单状态
+  status     String   @default("0") @db.Char(1)
+  /// 操作权限标识
+  perms      String?  @db.VarChar(100)
+  /// 菜单图标
+  icon       String?  @db.VarChar(100)
+  /// 创建者
+  createBy   BigInt?  @map("create_by")
+  /// 创建时间
+  createTime DateTime @default(now()) @map("create_time") @db.Timestamptz(6)
+  /// 更新者
+  updateBy   BigInt?  @map("update_by")
+  /// 更新时间
+  updateTime DateTime? @map("update_time") @db.Timestamptz(6)
+  /// 备注
+  remark     String?  @db.VarChar(500)
+
+  roles RoleMenu[]
+
+  @@index([parentId])
+  @@map("sys_menu")
+}

@@ -3,6 +3,8 @@
 model User {
   /// 用户ID
   userId             BigInt    @id @default(autoincrement()) @map("user_id")
+  /// 所属部门
+  deptId             BigInt?   @map("dept_id")
   /// 用户名称
   userName           String    @map("user_name") @db.VarChar(64)
   /// 用户昵称
@@ -31,8 +33,15 @@ model User {
   updateBy           BigInt?   @map("update_by")
   /// 更新时间
   updateTime         DateTime? @map("update_time") @db.Timestamptz(6)
-  /// 
+  /// 创建部门（审计来源）
+  createDept         BigInt?   @map("create_dept")
+  /// 备注
   remark             String?   @db.VarChar(500)
 
+  dept  Dept?      @relation(fields: [deptId], references: [deptId])
+  roles UserRole[]
+  posts UserPost[]
+
+  @@index([deptId])
   @@map("sys_user")
 }
