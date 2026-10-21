@@ -161,9 +161,11 @@ encrypt-key: <Base64 RSA 密文>
 
 ### 加密响应
 
-对于标记了 `@ApiEncrypt({ response: true })` 的路由，网关将可处理的普通响应正文序列化文本使用临时 AES 密钥加密，响应正文为 Base64 密文。RSA 加密后的 AES 密钥放在 `encrypt-key` 响应头中，响应 `Content-Type` 为 `text/plain`。跨域客户端可读取该响应头，网关会将其加入 `Access-Control-Expose-Headers`。
+对于标记了 `@ApiEncrypt({ response: true })` 的路由，网关将可处理的普通响应正文序列化文本使用临时 AES 密钥加密，响应正文为 Base64 密文。RSA 加密后的 AES 密钥放在 `encrypt-key` 响应头中，响应 `Content-Type` 为 `text/plain; charset=utf-8`。跨域客户端可读取该响应头，网关会将其加入 `Access-Control-Expose-Headers`。
 
 客户端使用对应 RSA 私钥解开响应头，得到 Base64 编码的 AES 密钥，再解码密钥并通过 AES-ECB/PKCS 填充解密正文。解密后正文是原始 JSON 文本或该路由返回的文本内容。
+
+当路由启用响应加密时，进入该路由后由统一异常过滤器生成的错误响应也按相同格式加密。请求解析阶段的解密失败发生在路由 Guard 之前，`400` / `413` 错误仍直接返回普通 JSON，不能假设所有错误正文都是密文。
 
 响应加密面向普通文本和 JSON API，不适用于文件下载、流式响应；HTTP `204` 和 `304` 响应不会改写。客户端与服务端应始终通过 HTTPS 通信。
 

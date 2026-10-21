@@ -1,5 +1,6 @@
 import { DateFormat } from '@app/core';
-import { Exclude, Expose } from 'class-transformer';
+import { ApiHideProperty } from '@nestjs/swagger';
+import { Exclude, Expose, Type } from 'class-transformer';
 
 /** 成功返回内容 */
 export class ResponseUserDto {
@@ -7,7 +8,8 @@ export class ResponseUserDto {
    * 用户id
    */
   @Expose()
-  userId!: number;
+  @Type(() => String)
+  userId!: string;
 
   /**
    * 用户名称
@@ -25,13 +27,13 @@ export class ResponseUserDto {
    * 邮箱
    */
   @Expose()
-  email: string;
+  email: string | null;
 
   /**
    * 手机号
    */
   @Expose()
-  phoneNumber: string;
+  phoneNumber: string | null;
 
   /**
    * 性别
@@ -43,6 +45,7 @@ export class ResponseUserDto {
    * 密码
    */
   @Exclude()
+  @ApiHideProperty()
   password: string;
 
   /**
@@ -61,47 +64,52 @@ export class ResponseUserDto {
    * 登录ip
    */
   @Expose()
-  loginIp: string;
+  loginIp: string | null;
 
   /**
    * 登录时间
    */
-  @DateFormat()
-  loginDate: string;
+  @Expose()
+  @DateFormat(undefined, { toClassOnly: true })
+  loginDate: string | null;
 
   /**
    * 邮箱
    */
   @Expose()
-  createDept: string;
+  createDept?: string;
 
   /**
    * 创建人
    */
   @Expose()
-  createBy: string;
+  @Type(() => String)
+  createBy: string | null;
 
   /**
-   * 创建时间
+   * 创建时间，在转入 DTO 时格式化，避免输出 JSON 时再次按服务器时区解析。
    */
-  @DateFormat()
+  @Expose()
+  @DateFormat(undefined, { toClassOnly: true })
   createTime: string;
 
   /**
    * 更新人
    */
   @Expose()
-  updateBy: string;
+  @Type(() => String)
+  updateBy: string | null;
 
   /**
    * 更新时间
    */
-  @DateFormat()
-  updateTime: string;
+  @Expose()
+  @DateFormat(undefined, { toClassOnly: true })
+  updateTime: string | null;
 
   /**
    * 备注
    */
   @Expose()
-  remark: string;
+  remark: string | null;
 }

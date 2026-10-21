@@ -1,6 +1,7 @@
 import type { Cache } from 'cache-manager';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Inject, Injectable } from '@nestjs/common';
+import { isValidCacheTtl } from './cache-ttl.js';
 
 export type CacheValue =
   string | number | boolean | null | CacheValue[] | { [key: string]: CacheValue };
@@ -42,7 +43,7 @@ export class CacheService {
   }
 
   private validateTtl(ttl: number | undefined): void {
-    if (ttl !== undefined && (!Number.isInteger(ttl) || ttl <= 0 || ttl > 2147483647)) {
+    if (ttl !== undefined && !isValidCacheTtl(ttl)) {
       throw new RangeError('缓存 TTL 必须是 1 到 2147483647 的整数毫秒，省略时使用默认值');
     }
   }

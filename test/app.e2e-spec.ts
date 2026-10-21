@@ -1,5 +1,5 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
-import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setImmediate } from 'node:timers/promises';
@@ -16,6 +16,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { AppModule } from '../apps/gateway/src/app.module.js';
 import { loggerDomain } from '../libs/config/src/domains/logger.domain.js';
 import { redisDomain } from '../libs/config/src/domains/redis.domain.js';
+import { readLogRecords } from './helpers/read-log-records.js';
 
 @Controller('log-probe')
 @RawResponse()
@@ -90,9 +91,7 @@ describe('Gateway Fastify 日志链路 (e2e)', () => {
   });
 
   async function records(prefix = 'gateway'): Promise<HttpLogRecord[]> {
-    const names = (await readdir(directory)).filter(file => file.startsWith(`${prefix}.`));
-    const contents = await Promise.all(names.map(file => readFile(join(directory, file), 'utf8')));
-    return contents.flatMap(content => content.split('\n').filter(Boolean).map(line => JSON.parse(line) as HttpLogRecord));
+    return readLogRecords<HttpLogRecord>(directory, prefix);
   }
 
   it('实际根模块按 Fastify 启动，根接口使用配置的全局 API 前缀', async () => {

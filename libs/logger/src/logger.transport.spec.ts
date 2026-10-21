@@ -8,6 +8,7 @@ import { promisify } from 'node:util';
 import { DIRECTORY_ERROR_PATTERN, LOG_DATE_PATTERN, LOGGER_TEST_SECRETS_PATTERN } from '@app/core/constants/regex.js';
 import pino from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readLogRecords } from '../../../test/helpers/read-log-records.js';
 import { loggerDomain } from '../../config/src/domains/logger.domain.js';
 import { createHttpOptions, createTransportOptions } from './logger.options.js';
 import { LoggerTransport } from './logger.transport.js';
@@ -43,8 +44,7 @@ file: { directory, 'max-files': 100 },
   }
 
   async function records(prefix: string): Promise<LogRecord[]> {
-    const contents = await Promise.all((await files(prefix)).map(file => readFile(join(directory, file), 'utf8')));
-    return contents.flatMap(content => content.split('\n').filter(Boolean).map(line => JSON.parse(line) as LogRecord));
+    return readLogRecords<LogRecord>(directory, prefix);
   }
 
   function rollingOptions(overrides: Record<string, unknown>): TransportMultiOptions {

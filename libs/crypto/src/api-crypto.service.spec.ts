@@ -1,9 +1,9 @@
-import type { ApiDecryptConfig } from '@app/config';
-import { constants, createCipheriv, createDecipheriv, generateKeyPairSync, privateDecrypt, publicEncrypt } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { FIELD_CIPHERTEXT_PREFIX_PATTERN } from '@app/core/constants/regex.js';
 import { instanceToPlain, plainToInstance } from 'class-transformer';
 
 import { describe, expect, it } from 'vitest';
+import { createCryptoConfig, decryptResponse, encryptRequest } from '../../../test/helpers/api-crypto-client.js';
 import { ApiCryptoService } from './api-crypto.service.js';
 import { DecryptField, EncryptField } from './field-crypto.decorator.js';
 
@@ -15,36 +15,19 @@ class FieldCryptoDto {
   visible!: string;
 }
 
-function createConfig(): ApiDecryptConfig {
-  const keys = generateKeyPairSync('rsa', {
-    modulusLength: 2048,
-    publicKeyEncoding: { type: 'spki', format: 'der' },
-    privateKeyEncoding: { type: 'pkcs8', format: 'der' },
-  });
-  return {
-    enabled: true,
-    headerFlag: 'encrypt-key',
-    privateKey: keys.privateKey.toString('base64'),
-    publicKey: keys.publicKey.toString('base64'),
-  };
-}
-
-function encryptRequest(plainBody: string, publicKey: string) {
-  const aesPassword = '0123456789abcdef0123456789abcdef';
-  const aesKey = Buffer.from(aesPassword, 'utf8');
-  const cipher = createCipheriv('aes-256-ecb', aesKey, null);
-  const encryptedBody = Buffer.concat([
-    cipher.update(Buffer.from(plainBody, 'utf8')),
-    cipher.final(),
-  ]).toString('base64');
-  const encryptedKey = publicEncrypt(
-    { key: Buffer.from(publicKey, 'base64'), format: 'der', type: 'spki', padding: constants.RSA_PKCS1_PADDING },
-    Buffer.from(Buffer.from(aesPassword, 'utf8').toString('base64'), 'utf8'),
-  ).toString('base64');
-  return { encryptedBody: Buffer.from(encryptedBody, 'utf8'), encryptedKey };
-}
-
 describe('apiCryptoService', () => {
+  it('解密独立固定的 AES-128/RSA 协议向量，不使用共享客户端编码函数', () => {
+    const vector = JSON.parse(readFileSync(new URL('../../../test/fixtures/api-crypto-request.json', import.meta.url), 'utf8'));
+    const service = new ApiCryptoService({
+      enabled: true,
+      headerFlag: 'encrypt-key',
+      privateKey: vector.privateKey,
+      publicKey: vector.publicKey,
+    });
+    expect(service.decryptRequest(vector.encryptedKey, Buffer.from(vector.encryptedBody, 'utf8')).toString('utf8'))
+      .toBe(vector.plaintext);
+  });
+
   it('encrypts and decrypts only decorated fields during DTO conversion', () => {
     const dto = plainToInstance(FieldCryptoDto, { secret: 'private value', visible: 'unchanged' });
     const encrypted = instanceToPlain(dto);
@@ -54,27 +37,21 @@ describe('apiCryptoService', () => {
   });
 
   it.each(['shared', 'separate'])('decrypts requests and encrypts responses with %s RSA key pairs', (keyMode) => {
-    const requestConfig = createConfig();
-    const responseConfig = keyMode === 'shared' ? requestConfig : createConfig();
+    const requestConfig = createCryptoConfig();
+    const responseConfig = keyMode === 'shared' ? requestConfig : createCryptoConfig();
     const config = { ...requestConfig, publicKey: responseConfig.publicKey };
     const service = new ApiCryptoService(config);
     const request = encryptRequest('{"message":"hello"}', requestConfig.publicKey!);
-    expect(service.decryptRequest(request.encryptedKey, request.encryptedBody).toString('utf8'))
+    expect(service.decryptRequest(request.encryptedKey, Buffer.from(request.encryptedBody, 'utf8')).toString('utf8'))
       .toBe('{"message":"hello"}');
 
     const response = service.encryptResponse('{"code":0,"data":{"message":"hello"},"message":"操作成功"}');
-    const encodedAesPassword = privateDecrypt(
-      { key: Buffer.from(responseConfig.privateKey!, 'base64'), format: 'der', type: 'pkcs8', padding: constants.RSA_PKCS1_PADDING },
-      Buffer.from(response.encryptedKey, 'base64'),
-    ).toString('utf8');
-    const aesPassword = Buffer.from(encodedAesPassword, 'base64').toString('utf8');
-    const responseDecipher = createDecipheriv('aes-256-ecb', Buffer.from(aesPassword, 'utf8'), null);
-    expect(Buffer.concat([responseDecipher.update(Buffer.from(response.body, 'base64')), responseDecipher.final()]).toString('utf8'))
+    expect(decryptResponse(response.body, response.encryptedKey, responseConfig.privateKey!))
       .toBe('{"code":0,"data":{"message":"hello"},"message":"操作成功"}');
   });
 
   it('rejects malformed RSA headers and invalid AES payloads', () => {
-    const service = new ApiCryptoService(createConfig());
+    const service = new ApiCryptoService(createCryptoConfig());
     expect(() => service.decryptRequest('invalid', Buffer.from('invalid'))).toThrow();
   });
 });

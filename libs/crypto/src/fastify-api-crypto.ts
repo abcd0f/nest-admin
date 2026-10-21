@@ -66,7 +66,7 @@ export function installApiCryptoHooks(
       'access-control-expose-headers',
       [...new Set(exposedHeaders.map((header) => header.trim()).filter(Boolean))].join(', '),
     );
-    reply.type('application/json; charset=utf-8');
+    reply.type('text/plain; charset=utf-8');
     return encrypted.body;
   });
 }

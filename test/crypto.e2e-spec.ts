@@ -1,6 +1,5 @@
 import type { ApiDecryptConfig } from '@app/config';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
-import { constants, createCipheriv, createDecipheriv, generateKeyPairSync, privateDecrypt, publicEncrypt } from 'node:crypto';
 import { createFastifyAdapter } from '@app/common';
 import { apiDecryptConfig, AppConfigModule } from '@app/config';
 import { CoreModule } from '@app/core';
@@ -8,6 +7,7 @@ import { ApiEncrypt, CryptoModule } from '@app/crypto';
 import { All, BadRequestException, Body, Controller, Get, Module } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createCryptoConfig, decryptResponse, encryptRequest } from './helpers/api-crypto-client.js';
 
 @Controller('crypto-probe')
 class CryptoProbeController {
@@ -41,53 +41,12 @@ class CryptoProbeController {
 })
 class ApiCryptoTestModule {}
 
-function makeConfig(): ApiDecryptConfig {
-  const keys = generateKeyPairSync('rsa', {
-    modulusLength: 2048,
-    publicKeyEncoding: { type: 'spki', format: 'der' },
-    privateKeyEncoding: { type: 'pkcs8', format: 'der' },
-  });
-  return {
-    enabled: true,
-    headerFlag: 'encrypt-key',
-    privateKey: keys.privateKey.toString('base64'),
-    publicKey: keys.publicKey.toString('base64'),
-  };
-}
-
-function encryptRequest(plainBody: string, publicKey: string) {
-  const aesPassword = '1234567890abcdef1234567890abcdef';
-  const cipher = createCipheriv('aes-256-ecb', Buffer.from(aesPassword, 'utf8'), null);
-  const encryptedBody = Buffer.concat([
-    cipher.update(Buffer.from(plainBody, 'utf8')),
-    cipher.final(),
-  ]).toString('base64');
-  const encryptedKey = publicEncrypt(
-    { key: Buffer.from(publicKey, 'base64'), format: 'der', type: 'spki', padding: constants.RSA_PKCS1_PADDING },
-    Buffer.from(Buffer.from(aesPassword, 'utf8').toString('base64'), 'utf8'),
-  ).toString('base64');
-  return { encryptedBody, encryptedKey };
-}
-
-function decryptResponse(encryptedBody: string, encryptedKey: string, privateKey: string): string {
-  const encodedAesPassword = privateDecrypt(
-    { key: Buffer.from(privateKey, 'base64'), format: 'der', type: 'pkcs8', padding: constants.RSA_PKCS1_PADDING },
-    Buffer.from(encryptedKey, 'base64'),
-  ).toString('utf8');
-  const aesPassword = Buffer.from(encodedAesPassword, 'base64').toString('utf8');
-  const decipher = createDecipheriv('aes-256-ecb', Buffer.from(aesPassword, 'utf8'), null);
-  return Buffer.concat([
-    decipher.update(Buffer.from(encryptedBody, 'base64')),
-    decipher.final(),
-  ]).toString('utf8');
-}
-
 describe('API AES/RSA 加密 (e2e)', () => {
   let app: NestFastifyApplication;
   let config: ApiDecryptConfig;
 
   beforeAll(async () => {
-    config = makeConfig();
+    config = createCryptoConfig();
     const module = await Test.createTestingModule({ imports: [ApiCryptoTestModule] })
       .overrideProvider(apiDecryptConfig.KEY)
       .useValue(config)
@@ -136,6 +95,7 @@ describe('API AES/RSA 加密 (e2e)', () => {
 
     const errorResponse = await app.inject({ method: 'GET', url: '/api/crypto-probe/response-error' });
     expect(errorResponse.statusCode).toBe(400);
+    expect(errorResponse.headers['content-type']).toContain('text/plain');
     expect(JSON.parse(decryptResponse(
       errorResponse.body,
       errorResponse.headers['encrypt-key'] as string,

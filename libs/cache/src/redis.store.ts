@@ -2,6 +2,7 @@ import type { KeyvStoreAdapter, StoredData } from 'keyv';
 import type { RedisConnection } from './redis.connection.js';
 import { EventEmitter } from 'node:events';
 import { Logger } from '@nestjs/common';
+import { isValidCacheTtl } from './cache-ttl.js';
 
 /** Keyv 公开存储契约：值由 Keyv 编码，键前缀也只由 Keyv 添加一次。 */
 export class RedisStore extends EventEmitter implements KeyvStoreAdapter {
@@ -27,7 +28,7 @@ export class RedisStore extends EventEmitter implements KeyvStoreAdapter {
 
   async set(key: string, value: unknown, ttl = this.defaultTtl): Promise<boolean> {
     if (typeof value !== 'string') throw new TypeError('Redis Store 仅接受 Keyv 序列化后的字符串');
-    if (!Number.isInteger(ttl) || ttl <= 0 || ttl > 2147483647)
+    if (!isValidCacheTtl(ttl))
       throw new RangeError('缓存 TTL 必须是正整数毫秒');
     const client = this.connection.client;
     if (!client) return true;

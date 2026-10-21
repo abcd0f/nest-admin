@@ -1,3 +1,4 @@
+import type { TransformOptions } from 'class-transformer';
 import { Transform, TransformFnParams } from 'class-transformer';
 import dayjs from 'dayjs';
 import timezone from 'dayjs/plugin/timezone.js';
@@ -9,8 +10,8 @@ dayjs.extend(timezone);
 export const DEFAULT_DATE_FORMAT = 'YYYY-MM-DD HH:mm:ss';
 export const DEFAULT_TIMEZONE = 'Asia/Shanghai';
 
-export function DateFormat(format: string = DEFAULT_DATE_FORMAT): PropertyDecorator {
-  return Transform(({ value }: TransformFnParams) => formatDateValue(value, format));
+export function DateFormat(format: string = DEFAULT_DATE_FORMAT, options?: TransformOptions): PropertyDecorator {
+  return Transform(({ value }: TransformFnParams) => formatDateValue(value, format), options);
 }
 
 export function formatDateValue(value: unknown, format: string = DEFAULT_DATE_FORMAT): unknown {
