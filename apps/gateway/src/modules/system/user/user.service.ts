@@ -15,7 +15,7 @@ export class UserService {
   }
 
   async findAll() {
-    const data = await paginate(this.prisma.user, { page: 1, pageSize: 10 });
+    const data = await paginate(this.prisma.user);
     return toPageDto(ResponseUserDto, data);
   }
 
