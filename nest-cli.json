@@ -23,6 +23,15 @@
     ]
   },
   "projects": {
+    "auth": {
+      "type": "library",
+      "root": "libs/auth",
+      "entryFile": "index",
+      "sourceRoot": "libs/auth/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/auth/tsconfig.lib.json"
+      }
+    },
     "cache": {
       "type": "library",
       "root": "libs/cache",
@@ -30,15 +39,6 @@
       "sourceRoot": "libs/cache/src",
       "compilerOptions": {
         "tsConfigPath": "libs/cache/tsconfig.lib.json"
-      }
-    },
-    "crypto": {
-      "type": "library",
-      "root": "libs/crypto",
-      "entryFile": "index",
-      "sourceRoot": "libs/crypto/src",
-      "compilerOptions": {
-        "tsConfigPath": "libs/crypto/tsconfig.lib.json"
       }
     },
     "common": {
@@ -68,6 +68,15 @@
         "tsConfigPath": "libs/core/tsconfig.lib.json"
       }
     },
+    "crypto": {
+      "type": "library",
+      "root": "libs/crypto",
+      "entryFile": "index",
+      "sourceRoot": "libs/crypto/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/crypto/tsconfig.lib.json"
+      }
+    },
     "database": {
       "type": "library",
       "root": "libs/database",
@@ -93,6 +102,15 @@
       "sourceRoot": "libs/logger/src",
       "compilerOptions": {
         "tsConfigPath": "libs/logger/tsconfig.lib.json"
+      }
+    },
+    "permission": {
+      "type": "library",
+      "root": "libs/permission",
+      "entryFile": "index",
+      "sourceRoot": "libs/permission/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/permission/tsconfig.lib.json"
       }
     },
     "swagger": {
