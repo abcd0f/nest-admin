@@ -15,11 +15,11 @@ API 请求/响应加密依赖 Fastify hooks 在请求体解析前解密密文。
 
 ## DTO 字段级加密和解密
 
-`@EncryptField()` 和 `@DecryptField()` 是针对单个 DTO 属性的 class-transformer 装饰器，使用 AES-256-GCM。字段密钥统一从 `@app/core` 的 `FIELD_ENCRYPTION_KEY` 常量读取，无需在每个 DTO 字段上重复传入。它们与 `@ApiEncrypt` 的整包 API 报文加密互相独立：`@ApiEncrypt` 不会触发字段转换，也不会改变字段加密算法。
+`@EncryptField()` 和 `@DecryptField()` 是针对单个 DTO 属性的 class-transformer 装饰器，使用 AES-256-GCM。字段密钥统一从 `@app/common` 的 `FIELD_ENCRYPTION_KEY` 常量读取，无需在每个 DTO 字段上重复传入。它们与 `@ApiEncrypt` 的整包 API 报文加密互相独立：`@ApiEncrypt` 不会触发字段转换，也不会改变字段加密算法。
 
 ### DTO 声明
 
-同一个字段同时标记两个装饰器时，入站密文在 `plainToInstance` 阶段解密，DTO 输出到普通对象时在 `instanceToPlain` 阶段加密。密钥常量定义在 `libs/core/src/constants/field-encryption.ts`，统一由 `libs/core/src/constants/index.ts` 导出。
+同一个字段同时标记两个装饰器时，入站密文在 `plainToInstance` 阶段解密，DTO 输出到普通对象时在 `instanceToPlain` 阶段加密。密钥常量定义在 `libs/common/src/constants/field-encryption.ts`，统一由 `libs/common/src/constants/index.ts` 导出。
 
 ```ts
 import { DecryptField, EncryptField } from '@app/crypto';

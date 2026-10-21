@@ -1,4 +1,3 @@
-export * from './constants/index.js';
 export * from './core.module.js';
 export * from './decorators/index.js';
 export * from './exceptions/index.js';

@@ -1,11 +1,12 @@
 import type { ThrottlerConfig } from '@app/config';
 import type { ThrottlerModuleOptions } from '@nestjs/throttler';
+
+import { BUSINESS_CODE, DEFAULT_BUSINESS_MESSAGE } from '@app/common/constants/index.js';
 import { throttlerConfig } from '@app/config';
 import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
-import { BUSINESS_CODE, DEFAULT_BUSINESS_MESSAGE } from './constants/index.js';
 import { AllExceptionsFilter } from './filters/index.js';
 import { ResponseInterceptor } from './interceptors/index.js';
 

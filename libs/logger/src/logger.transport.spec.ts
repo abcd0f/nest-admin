@@ -5,7 +5,7 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { DIRECTORY_ERROR_PATTERN, LOG_DATE_PATTERN, LOGGER_TEST_SECRETS_PATTERN } from '@app/core/constants/regex.js';
+import { DIRECTORY_ERROR_PATTERN, LOG_DATE_PATTERN, LOGGER_TEST_SECRETS_PATTERN } from '@app/common/constants/regex.js';
 import pino from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readLogRecords } from '../../../test/helpers/read-log-records.js';

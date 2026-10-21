@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { FIELD_CIPHERTEXT_PREFIX_PATTERN } from '@app/core/constants/regex.js';
+import { FIELD_CIPHERTEXT_PREFIX_PATTERN } from '@app/common/constants/regex.js';
 import { instanceToPlain, plainToInstance } from 'class-transformer';
 
 import { describe, expect, it } from 'vitest';

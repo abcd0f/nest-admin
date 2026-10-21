@@ -1,7 +1,7 @@
+import { BUSINESS_CODE, httpStatusToBusinessCode, prismaCodeToHttpStatus } from '@app/common/constants/index.js';
 import { HttpStatus } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
 
-import { BUSINESS_CODE, httpStatusToBusinessCode, prismaCodeToHttpStatus } from '../constants/index.js';
 import { BusinessException } from './business.exception.js';
 
 describe('业务异常', () => {

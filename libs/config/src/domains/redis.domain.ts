@@ -1,4 +1,4 @@
-import { REDIS_KEY_PREFIX_PATTERN } from '@app/core/constants/regex.js';
+import { REDIS_KEY_PREFIX_PATTERN } from '@app/common/constants/regex.js';
 import {
   asBoolean,
   asObject,

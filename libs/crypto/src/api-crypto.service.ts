@@ -1,7 +1,7 @@
 import type { ApiDecryptConfig } from '@app/config';
 import { constants, createCipheriv, createDecipheriv, createPrivateKey, createPublicKey, privateDecrypt, publicEncrypt, randomBytes } from 'node:crypto';
 import { Readable } from 'node:stream';
-import { BASE64_PATTERN } from '@app/core/constants/regex.js';
+import { BASE64_PATTERN } from '@app/common/constants/regex.js';
 
 export interface EncryptedResponse {
   body: string;

@@ -1,4 +1,4 @@
-import { ARGON2ID_HASH_PREFIX_PATTERN } from '@app/core/constants/regex.js';
+import { ARGON2ID_HASH_PREFIX_PATTERN } from '@app/common/constants/regex.js';
 import { describe, expect, it } from 'vitest';
 
 import { PasswordHashService } from './password-hash.service.js';

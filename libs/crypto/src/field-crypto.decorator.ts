@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
-import { FIELD_ENCRYPTION_KEY } from '@app/core';
+import { FIELD_ENCRYPTION_KEY } from '@app/common/constants/index.js';
 import { Transform } from 'class-transformer';
 
 const CIPHERTEXT_PREFIX = 'enc:v1:';

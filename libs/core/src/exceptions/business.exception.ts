@@ -1,8 +1,7 @@
 import type { FieldError } from '../interfaces/index.js';
 
+import { BUSINESS_CODE, DEFAULT_BUSINESS_MESSAGE } from '@app/common/constants/index.js';
 import { HttpException, HttpStatus } from '@nestjs/common';
-
-import { BUSINESS_CODE, DEFAULT_BUSINESS_MESSAGE } from '../constants/index.js';
 
 /**
  * 只读的业务错误定义。
