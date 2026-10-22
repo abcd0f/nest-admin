@@ -1,5 +1,11 @@
 import type { AuthConfig } from '@app/config';
-import type { AccessTokenClaims, AuthenticatedUser, AuthUser, TokenPair } from './auth.types.js';
+import type {
+  AccessTokenClaims,
+  AuthenticatedUser,
+  AuthSnapshot,
+  AuthUser,
+  TokenPair,
+} from './auth.types.js';
 import type { AuthSession } from './session.store.js';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { authConfig } from '@app/config';
@@ -72,16 +78,23 @@ export class AuthService {
     return { accessToken, refreshToken, tokenType: 'Bearer', expiresIn: exp - now };
   }
 
-  /** 只由账号密码验证成功后的登录业务调用；再次检查用户仍有效。 */
-  async createSession(userId: string): Promise<TokenPair> {
+  /**
+   * 只由账号密码验证成功后的登录业务调用；再次检查用户仍有效。
+   *
+   * `snapshot` 是登录时算好的角色/权限，随会话保存。之后鉴权只读会话，
+   * 对应 RuoYi `SysLoginService.buildLoginUser` 把权限写进 `LoginUser` 再落 Token Session。
+   */
+  async createSession(userId: string, snapshot: AuthSnapshot): Promise<TokenPair> {
     if (!isUserId(userId)) throw new UnauthorizedException('未认证');
     await this.loadUser(userId);
     const sid = randomUUID();
     const refreshToken = `${sid}.${randomBytes(32).toString('base64url')}`;
-    const session = {
+    const session: AuthSession = {
       userId,
       refreshHash: this.hash(refreshToken),
       expiresAt: Date.now() + this.config.refreshTokenTtl * 1000,
+      roles: [...snapshot.roles],
+      permissions: [...snapshot.permissions],
     };
     const tokens = await this.tokens(sid, session, refreshToken);
     await this.sessions.create(sid, session);
@@ -119,7 +132,13 @@ export class AuthService {
     if (session.userId !== claims.sub || claims.exp * 1000 > session.expiresAt)
       throw new UnauthorizedException('未认证');
     const user = await this.loadUser(claims.sub);
-    return { ...user, sessionId: claims.sid };
+    // 权限来自会话快照，不在鉴权阶段查角色/菜单关系。
+    return {
+      ...user,
+      sessionId: claims.sid,
+      roles: session.roles,
+      permissions: session.permissions,
+    };
   }
 
   async refresh(refreshToken: string): Promise<TokenPair> {
@@ -149,5 +168,15 @@ export class AuthService {
       throw new UnauthorizedException('未认证');
     }
     await this.sessions.revoke(sessionId);
+  }
+
+  /**
+   * 撤销某个用户的全部设备会话，返回被撤销的数量。
+   *
+   * 权限快照存在会话里，任何影响该用户授权的变更提交后都要调用本方法，
+   * 否则旧权限会一直生效到会话过期。对应 RuoYi `cleanOnlineUser`。
+   */
+  async revokeUserSessions(userId: string): Promise<number> {
+    return this.sessions.revokeUser(userId);
   }
 }

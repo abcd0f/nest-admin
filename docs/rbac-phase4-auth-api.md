@@ -1,6 +1,12 @@
 # RBAC 阶段 4：认证业务接口
 
-阶段 4 在 `apps/gateway/src/modules/system/auth` 新增业务 controller、service 和 module，接入 `SystemModule`。复用 `@app/auth` 的 JWT/Redis 会话和 `@app/permission` 的实时权限查询，没有修改 Prisma schema、迁移、依赖、令牌协议或配置键，也没有创建默认账号。
+> **⚠️ 部分描述已被取代（2026-10-22）。**
+>
+> 权限载体改为登录时快照：`login` 会先算 `PermissionService.snapshot()` 再写进会话，`profile` 读快照而不是实时查库。
+> 本文中"实时权限查询""实时权限变化"相关表述已不成立；`menus` 仍然每次查库（与 RuoYi `getRouters` 一致），这部分描述依然有效。
+> 当前实现以 `docs/rbac-compare-ruoyi-plus.md` 第 3 节为准。
+
+阶段 4 在 `apps/gateway/src/modules/system/auth` 新增业务 controller、service 和 module，接入 `SystemModule`。复用 `@app/auth` 的 JWT/Redis 会话和 `@app/permission` 的权限查询，没有修改 Prisma schema、迁移、依赖、令牌协议或配置键，也没有创建默认账号。
 
 ## 1. 接口约定
 

@@ -18,6 +18,8 @@ const context: AuthenticatedUser = {
   nickName: user.nickName,
   deptId: String(user.deptId),
   sessionId: 'internal-session',
+  roles: ['operator'],
+  permissions: ['user:list'],
 };
 
 function menu(menuId: bigint, parentId = 0n, extra = {}) {
@@ -54,9 +56,13 @@ async function fixture() {
   };
   const auth = { createSession: vi.fn().mockResolvedValue({ accessToken: 'access' }) };
   const permissions = {
-    getAuthorization: vi
-      .fn()
-      .mockResolvedValue({ roles: ['operator'], permissions: ['user:list'] }),
+    // 登录时算一次快照，写进会话。
+    snapshot: vi.fn().mockResolvedValue({ roles: ['operator'], permissions: ['user:list'] }),
+    // 运行期只读上下文里的快照，不查库。
+    getAuthorization: vi.fn((value: AuthenticatedUser) => ({
+      roles: value.roles,
+      permissions: value.permissions,
+    })),
   };
   const service = new SystemAuthService(
     prisma as never,
@@ -70,7 +76,7 @@ async function fixture() {
 
 describe('认证业务登录与当前用户', () => {
   it('精确匹配账号，限制歧义查询，成功后记录审计并仅返回脱敏字符串 ID', async () => {
-    const { service, prisma, passwords, auth } = await fixture();
+    const { service, prisma, passwords, auth, permissions } = await fixture();
     const response = await service.login({ userName: 'alice', password: ' secret ' }, '127.0.0.1');
     expect(prisma.user.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -83,7 +89,12 @@ describe('认证业务登录与当前用户', () => {
       where: { userId: user.userId, status: '0', delFlag: '0', password: user.password },
       data: { loginIp: '127.0.0.1', loginDate: expect.any(Date) },
     });
-    expect(auth.createSession).toHaveBeenCalledWith(String(user.userId));
+    // 登录时算一次快照，结果随会话保存，后续鉴权不再查库。
+    expect(permissions.snapshot).toHaveBeenCalledExactlyOnceWith(String(user.userId));
+    expect(auth.createSession).toHaveBeenCalledWith(String(user.userId), {
+      roles: ['operator'],
+      permissions: ['user:list'],
+    });
     expect(response).toEqual({
       accessToken: 'access',
       user: {
@@ -144,7 +155,7 @@ describe('认证业务登录与当前用户', () => {
     expect(auth.createSession).not.toHaveBeenCalled();
   });
 
-  it('当前用户资料只合并实时角色和权限，不暴露内部会话标识', async () => {
+  it('当前用户资料只回显会话快照里的角色和权限，不暴露内部会话标识', async () => {
     const { service, permissions } = await fixture();
     expect(await service.profile(context)).toEqual({
       userId: context.userId,
@@ -154,7 +165,9 @@ describe('认证业务登录与当前用户', () => {
       roles: ['operator'],
       permissions: ['user:list'],
     });
-    expect(permissions.getAuthorization).toHaveBeenCalledWith(context.userId);
+    // 读取快照，不再按 userId 查库。
+    expect(permissions.getAuthorization).toHaveBeenCalledWith(context);
+    expect(permissions.snapshot).not.toHaveBeenCalled();
   });
 });
 
@@ -216,6 +229,44 @@ describe('当前用户菜单树', () => {
       await expect(service.menus(context.userId)).rejects.toThrow(UnauthorizedException);
     },
   );
+
+  it('超级管理员返回全部启用目录/菜单，不依赖角色关联，也不按 visible 过滤', async () => {
+    const { service, prisma } = await fixture();
+    prisma.user.findUnique.mockResolvedValue({ status: '0', delFlag: '0' });
+    const findMany = vi.fn().mockResolvedValue([
+      menu(1n, 0n, { menuType: 'M' }),
+      menu(2n, 1n, { visible: '1' }),
+      menu(3n, 0n, { menuType: 'F' }),
+    ]);
+    Object.assign(prisma, { menu: { findMany } });
+    const result = await service.menus('1');
+    expect(result.map((item) => item.menuId)).toEqual(['1']);
+    expect(result[0].children.map((item) => item.menuId)).toEqual(['2']);
+    // 对应 Java 侧 selectMenuTreeAll：只过滤启用状态与目录/菜单类型，不过滤 visible。
+    expect(findMany.mock.lastCall?.[0].where).toEqual({
+      status: '0',
+      menuType: { in: ['M', 'C'] },
+    });
+    expect(prisma.user.findUnique.mock.lastCall?.[0].select).toEqual({
+      status: true,
+      delFlag: true,
+    });
+  });
+
+  it('超级管理员被停用或删除时不再返回全量菜单', async () => {
+    for (const value of [
+      { status: '1', delFlag: '0' },
+      { status: '0', delFlag: '2' },
+      null,
+    ]) {
+      const { service, prisma } = await fixture();
+      prisma.user.findUnique.mockResolvedValue(value);
+      const findMany = vi.fn();
+      Object.assign(prisma, { menu: { findMany } });
+      await expect(service.menus('1')).rejects.toThrow(UnauthorizedException);
+      expect(findMany).not.toHaveBeenCalled();
+    }
+  });
 
   it('菜单查询故障返回服务不可用', async () => {
     const { service, prisma } = await fixture();

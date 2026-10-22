@@ -1,11 +1,12 @@
 import type { AuthenticatedUser } from '@app/auth';
 import type { Prisma } from '@app/database/generated/prisma/client.js';
-import { isUserId } from '@app/auth';
+import { AuthService, isUserId } from '@app/auth';
 import { toDto, toPageDto } from '@app/common';
 import { BusinessException } from '@app/core';
 import { paginate, PrismaService } from '@app/database';
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { ensureAdministratorRemains, hasActiveAdministrator } from '../administrator.js';
+import { revokeSessions, usersOfRole } from '../session-invalidation.js';
+import { assertRoleKeyAvailable, assertRoleKeyNotReserved } from '../super-admin.js';
 import {
   AssignRoleMenusDto,
   CreateRoleDto,
@@ -31,7 +32,10 @@ const roleSelect = {
 
 @Injectable()
 export class RoleService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(AuthService) private readonly auth: AuthService,
+  ) {}
 
   async findAll(query: RoleQueryDto) {
     const where: Prisma.RoleWhereInput = {
@@ -80,6 +84,7 @@ export class RoleService {
   }
 
   async create(body: CreateRoleDto, actor: AuthenticatedUser) {
+    assertRoleKeyAvailable(body.roleKey);
     const row = await this.prisma.$transaction(
       async (tx) => {
         if (await tx.role.count({ where: { roleKey: body.roleKey, delFlag: '0' } })) {
@@ -110,9 +115,14 @@ export class RoleService {
       async (tx) => {
         const role = await tx.role.findFirst({
           where: { roleId, delFlag: '0' },
-          select: { roleId: true },
+          select: { roleId: true, roleKey: true },
         });
         if (!role) throw new NotFoundException('角色不存在');
+        // 保留标识既不能被改名，也不能被新值占用；仅在标识实际变化时判定。
+        if (body.roleKey !== undefined && body.roleKey !== role.roleKey) {
+          assertRoleKeyNotReserved(role.roleKey);
+          assertRoleKeyAvailable(body.roleKey);
+        }
         if (
           body.roleKey !== undefined &&
           (await tx.role.count({
@@ -121,7 +131,6 @@ export class RoleService {
         ) {
           throw new ConflictException('角色标识已存在');
         }
-        const hadAdministrator = body.status === '1' ? await hasActiveAdministrator(tx) : false;
         const updated = await tx.role.update({
           where: { roleId },
           data: {
@@ -134,11 +143,14 @@ export class RoleService {
           },
           select: roleSelect,
         });
-        await ensureAdministratorRemains(tx, hadAdministrator);
         return updated;
       },
       { isolationLevel: 'Serializable' },
     );
+    // 状态或角色标识变更会影响该角色下所有用户的快照（含 @Role 兜底判定）。
+    if (body.status !== undefined || body.roleKey !== undefined) {
+      await revokeSessions(this.auth, await usersOfRole(this.prisma, roleId));
+    }
     return toDto(RoleResponseDto, {
       ...row,
       menuIds: row.menus.map((menu) => menu.menuId),
@@ -170,11 +182,9 @@ export class RoleService {
             { field: 'menuIds', messages: ['包含不存在或停用的菜单'] },
           ]);
         }
-        const hadAdministrator = await hasActiveAdministrator(tx);
         await tx.roleMenu.deleteMany({ where: { roleId } });
         if (menuIds.length)
           await tx.roleMenu.createMany({ data: menuIds.map((menuId) => ({ roleId, menuId })) });
-        await ensureAdministratorRemains(tx, hadAdministrator);
         return tx.role.update({
           where: { roleId },
           data: { updateBy: BigInt(actor.userId) },
@@ -183,6 +193,8 @@ export class RoleService {
       },
       { isolationLevel: 'Serializable' },
     );
+    // 菜单集合变了，该角色下所有用户的快照作废。
+    await revokeSessions(this.auth, await usersOfRole(this.prisma, roleId));
     return toDto(RoleResponseDto, {
       ...row,
       menuIds: row.menus.map((menu) => menu.menuId),
@@ -258,14 +270,12 @@ export class RoleService {
         if (!role) throw new NotFoundException('角色不存在');
         if (await tx.userRole.count({ where: { roleId } }))
           throw new ConflictException('角色仍被用户引用，请先解除关联');
-        const hadAdministrator = await hasActiveAdministrator(tx);
         await tx.roleMenu.deleteMany({ where: { roleId } });
         await tx.roleDept.deleteMany({ where: { roleId } });
         await tx.role.update({
           where: { roleId },
           data: { delFlag: '2', updateBy: BigInt(actor.userId) },
         });
-        await ensureAdministratorRemains(tx, hadAdministrator);
       },
       { isolationLevel: 'Serializable' },
     );

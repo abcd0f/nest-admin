@@ -19,7 +19,11 @@ const actor: AuthenticatedUser = {
   nickName: 'Operator',
   deptId: '3',
   sessionId: 'session',
+  roles: ['operator'],
+  permissions: ['system:user:list'],
 };
+/** 会话撤销桩：影响权限的写操作提交后会按用户踢人。 */
+const auth = { revokeUserSessions: vi.fn().mockResolvedValue(1) };
 const date = new Date('2026-01-02T03:04:05.000Z');
 
 function transaction(tx: object) {
@@ -102,26 +106,6 @@ function menuRow(extra: Record<string, unknown> = {}) {
   };
 }
 
-function administrator() {
-  const permissions = [
-    ...['user', 'role', 'menu', 'dept'].flatMap((resource) =>
-      ['list', 'query', 'add', 'edit', 'delete'].map((action) => `system:${resource}:${action}`),
-    ),
-    'system:user:assignRoles',
-    'system:role:assignMenus',
-    'system:role:dataScope',
-  ];
-  return {
-    roles: [
-      {
-        role: {
-          menus: permissions.map((perms) => ({ menu: { perms } })),
-        },
-      },
-    ],
-  };
-}
-
 describe('分页与响应 DTO', () => {
   it('用户分页直接使用 delegate 和查询参数，补齐本页角色并排除敏感字段', async () => {
     const prisma = {
@@ -140,7 +124,7 @@ describe('分页与响应 DTO', () => {
         ]),
       },
     };
-    const service = new UserService(prisma as never, {} as never);
+    const service = new UserService(prisma as never, {} as never, auth as never);
     const page = await service.findAll({
       page: 2,
       pageSize: 1,
@@ -190,7 +174,7 @@ describe('分页与响应 DTO', () => {
       },
       roleDept: { findMany: vi.fn().mockResolvedValue([{ roleId: 3n, deptId: 6n }]) },
     };
-    const page = await new RoleService(prisma as never).findAll({});
+    const page = await new RoleService(prisma as never, auth as never).findAll({});
     expect(prisma.role.findMany.mock.lastCall?.[0]).toMatchObject({
       skip: 0,
       take: 20,
@@ -211,7 +195,7 @@ describe('分页与响应 DTO', () => {
       user: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
       userRole: { findMany: vi.fn().mockResolvedValue([]) },
     };
-    expect(await new UserService(prisma as never, {} as never).findAll({})).toMatchObject({
+    expect(await new UserService(prisma as never, {} as never, auth as never).findAll({})).toMatchObject({
       items: [],
       meta: { total: 0, totalPage: 0 },
     });
@@ -249,9 +233,9 @@ describe('直接参数与字段校验', () => {
         dept: { findFirst: vi.fn() },
       };
       const services = [
-        new UserService(prisma as never, {} as never),
-        new RoleService(prisma as never),
-        new MenuService(prisma as never),
+        new UserService(prisma as never, {} as never, auth as never),
+        new RoleService(prisma as never, auth as never),
+        new MenuService(prisma as never, auth as never),
         new DeptService(prisma as never),
       ];
       for (const service of services)
@@ -271,9 +255,9 @@ describe('直接参数与字段校验', () => {
       dept: { findFirst: vi.fn().mockResolvedValue(null) },
     };
     for (const service of [
-      new UserService(prisma as never, {} as never),
-      new RoleService(prisma as never),
-      new MenuService(prisma as never),
+      new UserService(prisma as never, {} as never, auth as never),
+      new RoleService(prisma as never, auth as never),
+      new MenuService(prisma as never, auth as never),
       new DeptService(prisma as never),
     ]) {
       await expect(service.findOne('9223372036854775807')).rejects.toMatchObject({ status: 404 });
@@ -297,36 +281,9 @@ describe('直接参数与字段校验', () => {
   });
 });
 
-describe('管理写操作的有效管理员保护', () => {
-  it('停用其他账号会在事务内检查管理员变化，最后一位失效时拒绝提交', async () => {
+describe('权限变更后的会话失效', () => {
+  it('角色菜单变更后撤销该角色下所有用户的会话', async () => {
     const tx = {
-      user: {
-        findMany: vi.fn().mockResolvedValueOnce([administrator()]).mockResolvedValueOnce([]),
-        findFirst: vi.fn().mockResolvedValue({ userId: 8n, status: '0' }),
-        update: vi.fn().mockResolvedValue(userRow({ userId: 8n, status: '1' })),
-      },
-    };
-    const $transaction = vi.fn((action: (client: never) => Promise<unknown>, _options?: unknown) =>
-      action(tx as never),
-    );
-    const service = new UserService({ $transaction } as never, {} as never);
-    await expect(service.update('8', { status: '1' }, actor)).rejects.toMatchObject({
-      status: 409,
-    });
-    expect($transaction).toHaveBeenCalledOnce();
-    expect(tx.user.update).toHaveBeenCalledOnce();
-    expect(tx.user.findMany).toHaveBeenCalledTimes(2);
-    expect($transaction.mock.lastCall?.[1]).toEqual({ isolationLevel: 'Serializable' });
-  });
-
-  it('清空角色菜单会在同一事务检查管理员，最后一位仍有效时允许其他操作', async () => {
-    const tx = {
-      user: {
-        findMany: vi
-          .fn()
-          .mockResolvedValueOnce([administrator()])
-          .mockResolvedValueOnce([administrator()]),
-      },
       role: {
         findFirst: vi.fn().mockResolvedValue({ roleId: 2n }),
         update: vi.fn().mockResolvedValue(roleRow({ menus: [] })),
@@ -337,13 +294,40 @@ describe('管理写操作的有效管理员保护', () => {
     const $transaction = vi.fn((action: (client: never) => Promise<unknown>, _options?: unknown) =>
       action(tx as never),
     );
-    const service = new RoleService({ $transaction } as never);
+    // 踢人走事务外的索引查询，与事务内的 tx 分开。
+    const prisma = {
+      $transaction,
+      userRole: { findMany: vi.fn().mockResolvedValue([{ userId: 2n }, { userId: 3n }]) },
+    };
+    auth.revokeUserSessions.mockClear();
+    const service = new RoleService(prisma as never, auth as never);
     await expect(service.assignMenus('2', { menuIds: [] }, actor)).resolves.toMatchObject({
       roleId: '2',
     });
     expect(tx.roleMenu.deleteMany).toHaveBeenCalledOnce();
-    expect(tx.user.findMany).toHaveBeenCalledTimes(2);
     expect($transaction.mock.lastCall?.[1]).toEqual({ isolationLevel: 'Serializable' });
+    // 菜单集合变了，该角色下所有用户的快照作废。
+    expect(auth.revokeUserSessions.mock.calls).toEqual([['2'], ['3']]);
+  });
+
+  it('停用用户后撤销该用户的会话，不影响事务提交', async () => {
+    const tx = {
+      user: {
+        findFirst: vi.fn().mockResolvedValue({ userId: 8n, status: '0' }),
+        update: vi.fn().mockResolvedValue(userRow({ userId: 8n, status: '1' })),
+        count: vi.fn().mockResolvedValue(0),
+      },
+    };
+    const $transaction = vi.fn((action: (client: never) => Promise<unknown>, _options?: unknown) =>
+      action(tx as never),
+    );
+    auth.revokeUserSessions.mockClear();
+    const service = new UserService({ $transaction } as never, {} as never, auth as never);
+    await expect(service.update('8', { status: '1' }, actor)).resolves.toMatchObject({
+      userId: '8',
+    });
+    expect(tx.user.update).toHaveBeenCalledOnce();
+    expect(auth.revokeUserSessions.mock.calls).toEqual([['8']]);
   });
 });
 
@@ -366,7 +350,7 @@ describe('菜单和部门管理树', () => {
           ]),
       },
     };
-    const tree = await new MenuService(prisma as never).findAll();
+    const tree = await new MenuService(prisma as never, auth as never).findAll();
     expect(tree[0]).toBeInstanceOf(MenuTreeDto);
     expect(tree[0].children[0]).toBeInstanceOf(MenuTreeDto);
     expect(tree[0].children[0].children[0]).toBeInstanceOf(MenuTreeDto);
@@ -401,7 +385,7 @@ describe('用户管理服务', () => {
     };
     const prisma = { $transaction: transaction(tx) };
     const passwords = { hashPassword: vi.fn().mockResolvedValue('argon-hash') };
-    const service = new UserService(prisma as never, passwords as never);
+    const service = new UserService(prisma as never, passwords as never, auth as never);
     const response = await service.create(
       { userName: 'alice', nickName: 'Alice', password: 'secret' },
       actor,
@@ -431,25 +415,47 @@ describe('用户管理服务', () => {
     const tx = {
       user: {
         findMany: vi.fn().mockResolvedValue([]),
-        findFirst: vi.fn().mockResolvedValue({ userId: 1n }),
+        findFirst: vi.fn().mockResolvedValue({ userId: 2n }),
         update: vi.fn().mockResolvedValue(userRow()),
       },
       role: { findMany: vi.fn().mockResolvedValue([{ roleId: 2n }, { roleId: 3n }]) },
       userRole: { deleteMany: vi.fn(), createMany: vi.fn() },
     };
-    const service = new UserService({ $transaction: transaction(tx) } as never, {} as never);
-    await service.assignRoles('1', { roleIds: ['2', '2', '3'] }, actor);
+    const service = new UserService({ $transaction: transaction(tx) } as never, {} as never, auth as never);
+    await service.assignRoles('2', { roleIds: ['2', '2', '3'] }, actor);
     expect(tx.userRole.deleteMany).toHaveBeenCalledOnce();
     expect(tx.userRole.createMany.mock.lastCall?.[0].data).toEqual([
-      { userId: 1n, roleId: 2n },
-      { userId: 1n, roleId: 3n },
+      { userId: 2n, roleId: 2n },
+      { userId: 2n, roleId: 3n },
     ]);
     tx.role.findMany.mockResolvedValue([{ roleId: 2n }]);
     tx.userRole.deleteMany.mockClear();
-    await expect(service.assignRoles('1', { roleIds: ['2', '3'] }, actor)).rejects.toMatchObject({
+    await expect(service.assignRoles('2', { roleIds: ['2', '3'] }, actor)).rejects.toMatchObject({
       status: 422,
     });
     expect(tx.userRole.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('超级管理员账号不允许被修改、改角色或删除，且在事务外直接拒绝', async () => {
+    const tx = {
+      user: {
+        findMany: vi.fn().mockResolvedValue([]),
+        findFirst: vi.fn().mockResolvedValue({ userId: 1n }),
+        update: vi.fn(),
+      },
+      userRole: { deleteMany: vi.fn() },
+    };
+    const prisma = { $transaction: transaction(tx) };
+    const service = new UserService(prisma as never, {} as never, auth as never);
+    await expect(service.update('1', { nickName: 'x' }, actor)).rejects.toThrow(
+      '不允许操作超级管理员用户',
+    );
+    await expect(service.assignRoles('1', { roleIds: [] }, actor)).rejects.toThrow(
+      '不允许操作超级管理员用户',
+    );
+    await expect(service.remove('1', actor)).rejects.toThrow('不允许操作超级管理员用户');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(tx.user.update).not.toHaveBeenCalled();
   });
 
   it('禁止停用或删除本人，拒绝删除仍担任负责人的用户', async () => {
@@ -464,7 +470,7 @@ describe('用户管理服务', () => {
       dept: { count: vi.fn().mockResolvedValue(0) },
       userRole: { deleteMany: vi.fn() },
     };
-    const service = new UserService({ $transaction: transaction(tx) } as never, {} as never);
+    const service = new UserService({ $transaction: transaction(tx) } as never, {} as never, auth as never);
     await expect(service.update('7', { status: '1' }, actor)).rejects.toThrow('不能停用当前用户');
     await expect(service.remove('7', actor)).rejects.toThrow('不能删除当前用户');
     tx.user.findFirst.mockResolvedValue({ userId: 8n });
@@ -485,7 +491,7 @@ describe('角色和菜单管理服务', () => {
       roleDept: { deleteMany: vi.fn(), createMany: vi.fn() },
     };
     const prisma = { $transaction: transaction(tx) };
-    const service = new RoleService(prisma as never);
+    const service = new RoleService(prisma as never, auth as never);
     expect(
       (await service.dataScope('2', { dataScope: '2', deptIds: ['5'] }, actor)).deptIds,
     ).toEqual(['5']);
@@ -507,11 +513,36 @@ describe('角色和菜单管理服务', () => {
       menu: { findMany: vi.fn().mockResolvedValue([{ menuId: 4n }]) },
       roleMenu: { deleteMany: vi.fn(), createMany: vi.fn() },
     };
-    const service = new RoleService({ $transaction: transaction(tx) } as never);
+    const service = new RoleService({ $transaction: transaction(tx) } as never, auth as never);
     await expect(service.assignMenus('2', { menuIds: ['4', '5'] }, actor)).rejects.toMatchObject({
       status: 422,
     });
     expect(tx.roleMenu.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('拒绝新建或改名占用系统内置角色标识，且不进入事务', async () => {
+    const tx = {
+      role: {
+        count: vi.fn().mockResolvedValue(0),
+        findFirst: vi.fn().mockResolvedValue({ roleId: 2n, roleKey: 'superadmin' }),
+        update: vi.fn(),
+      },
+    };
+    const prisma = { $transaction: transaction(tx) };
+    const service = new RoleService(prisma as never, auth as never);
+    for (const roleKey of ['superadmin', 'admin']) {
+      await expect(
+        service.create({ roleName: 'reserved', roleKey } as never, actor),
+      ).rejects.toThrow('不允许使用系统内置管理员角色标识符');
+    }
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    // 原标识已是保留标识时，改成任何新值都不允许。
+    for (const roleKey of ['admin', 'operator']) {
+      await expect(service.update('2', { roleKey }, actor)).rejects.toThrow(
+        '不允许修改系统内置管理员角色标识符',
+      );
+    }
+    expect(tx.role.update).not.toHaveBeenCalled();
   });
 
   it('菜单创建拒绝错误父类型；物理删除前保护子节点和角色关联', async () => {
@@ -528,7 +559,7 @@ describe('角色和菜单管理服务', () => {
       },
       roleMenu: { count: vi.fn().mockResolvedValue(1) },
     };
-    const service = new MenuService({ $transaction: transaction(tx) } as never);
+    const service = new MenuService({ $transaction: transaction(tx) } as never, auth as never);
     await expect(
       service.create({ parentId: '1', menuName: 'button', menuType: 'F', perms: 'save' }, actor),
     ).rejects.toMatchObject({ status: 422 });

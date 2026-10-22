@@ -8,7 +8,7 @@ import { RedisClient } from '@app/cache';
 import { createFastifyAdapter } from '@app/common';
 import { loggerConfig } from '@app/config';
 import { PrismaService } from '@app/database';
-import { Authenticated, Mode, Permission, RequirePermissions, Role } from '@app/permission';
+import { Authenticated, Mode, Permission, PermissionService, RequirePermissions, Role } from '@app/permission';
 import { Body, Controller, Get, Inject, Post, UnauthorizedException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -108,7 +108,7 @@ describe('实际网关 RBAC 接入 (e2e)', () => {
   const findUnique = vi.fn(async ({ select }: { select: { roles?: unknown } }) => {
     if (authorizationUnavailable && select.roles) throw new Error('private database detail');
     return {
-      userId: 1n,
+      userId: 2n,
       userName: 'alice',
       nickName: 'Alice',
       deptId: null,
@@ -141,6 +141,16 @@ describe('实际网关 RBAC 接入 (e2e)', () => {
         revoke: async (sid: string) => {
           sessions.delete(sid);
         },
+        revokeUser: async (userId: string) => {
+          let count = 0;
+          for (const [sid, session] of sessions) {
+            if (session.userId === userId) {
+              sessions.delete(sid);
+              count += 1;
+            }
+          }
+          return count;
+        },
       })
       .overrideProvider(loggerConfig.KEY)
       .useValue(
@@ -156,17 +166,30 @@ describe('实际网关 RBAC 接入 (e2e)', () => {
     app.setGlobalPrefix('api');
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
-    token = (await app.get(AuthService).createSession('1')).accessToken;
+    token = await login();
   });
+
+  /**
+   * 登录一次，把当前 mock 的角色/菜单算成快照写进会话。
+   *
+   * 用 2 号用户而不是 1 号：1 号是超级管理员，会直接拿到 `*:*:*`，
+   * 让所有权限断言失去意义。
+   */
+  async function login(): Promise<string> {
+    const snapshot = await app.get(PermissionService).snapshot('2');
+    return (await app.get(AuthService).createSession('2', snapshot)).accessToken;
+  }
 
   afterAll(async () => {
     await app?.close();
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     roles = [assignment()];
     active = true;
     authorizationUnavailable = false;
+    // 每个用例用独立会话，避免上一个用例的踢人影响后续断言。
+    token = await login();
   });
 
   it('健康检查公开，示例接口默认受认证保护，错误沿用统一响应', async () => {
@@ -186,11 +209,13 @@ describe('实际网关 RBAC 接入 (e2e)', () => {
     ['PATCH', '/api/system/roles/1/data-scope'],
   ] as const)('RBAC 管理端点 $method $url 要求认证且检查独立功能权限', async (method, url) => {
     roles = [assignment('operator', [])];
+    // 权限在登录时算进快照，所以要重新登录才能反映新的授权关系。
+    const limited = await login();
     expect((await app.inject({ method, url })).statusCode).toBe(401);
     const response = await app.inject({
       method,
       url,
-      headers: { authorization: `Bearer ${token}` },
+      headers: { authorization: `Bearer ${limited}` },
     });
     expect(response.statusCode).toBe(403);
     expect(response.json()).toMatchObject({ code: 403, data: null });
@@ -201,7 +226,7 @@ describe('实际网关 RBAC 接入 (e2e)', () => {
       url: '/api/rbac-probe/profile',
       headers: { authorization: `Bearer ${token}` },
     });
-    expect(response.json()).toEqual({ code: 0, data: { userId: '1' }, message: '操作成功' });
+    expect(response.json()).toEqual({ code: 0, data: { userId: '2' }, message: '操作成功' });
     active = false;
     expect(
       (
@@ -218,7 +243,11 @@ describe('实际网关 RBAC 接入 (e2e)', () => {
     const request = { url: '/api/rbac-probe/list', headers: { authorization: `Bearer ${token}` } };
     expect((await app.inject(request)).statusCode).toBe(200);
     roles = [];
-    const rejected = await app.inject(request);
+    const denied = await login();
+    const rejected = await app.inject({
+      ...request,
+      headers: { authorization: `Bearer ${denied}` },
+    });
     expect(rejected.statusCode).toBe(403);
     expect(rejected.json()).toMatchObject({ code: 403, data: null });
     expect(
@@ -256,10 +285,11 @@ describe('实际网关 RBAC 接入 (e2e)', () => {
   });
 
   it('主模块直接注册两个守卫，HTTP 验证 AND/OR、角色兜底与叠加规则', async () => {
-    const request = (path: string) =>
+    // 每次断言前重新登录，确保快照反映当前 roles。
+    const request = async (path: string) =>
       app.inject({
         url: `/api/rbac-probe/${path}`,
-        headers: { authorization: `Bearer ${token}` },
+        headers: { authorization: `Bearer ${await login()}` },
       });
     expect((await request('and')).statusCode).toBe(403);
     roles = [assignment('operator', ['system:user:list', 'system:user:edit'])];
@@ -281,53 +311,81 @@ describe('实际网关 RBAC 接入 (e2e)', () => {
     expect((await request('stacked')).statusCode).toBe(200);
   });
 
-  it.each([
-    'role-disabled',
-    'role-deleted',
-    'user-role-removed',
-    'role-menu-removed',
-    'menu-disabled',
-  ])('原 JWT 不变，授权关联变化后下一次请求拒绝：%s', async (change) => {
+  it('授权关联变化不影响已签发的会话，撤销会话后立即失效', async () => {
     const request = { url: '/api/rbac-probe/list', headers: { authorization: `Bearer ${token}` } };
     expect((await app.inject(request)).statusCode).toBe(200);
-    if (change === 'role-disabled') roles[0].role.status = '1';
-    if (change === 'role-deleted') roles[0].role.delFlag = '2';
-    if (change === 'user-role-removed') roles = [];
-    if (change === 'role-menu-removed') roles[0].role.menus = [];
-    if (change === 'menu-disabled') roles[0].role.menus[0].menu.status = '1';
-    expect((await app.inject(request)).statusCode).toBe(403);
+    for (const mutate of [
+      () => {
+        roles = [assignment()];
+        roles[0].role.status = '1';
+      },
+      () => {
+        roles = [assignment()];
+        roles[0].role.delFlag = '2';
+      },
+      () => {
+        roles = [];
+      },
+      () => {
+        roles = [assignment()];
+        roles[0].role.menus = [];
+      },
+      () => {
+        roles = [assignment()];
+        roles[0].role.menus[0].menu.status = '1';
+      },
+    ]) {
+      mutate();
+      // 快照在会话里，改库不会影响旧 token——这是与"实时查库"模型的根本差异。
+      expect((await app.inject(request)).statusCode).toBe(200);
+    }
+    // 管理面写操作会调用 revokeUserSessions，之后旧 token 一律 401。
+    await app.get(AuthService).revokeUserSessions('2');
+    expect((await app.inject(request)).statusCode).toBe(401);
+    // 重新登录后拿到空权限的新快照。
+    const fresh = await login();
+    expect(
+      (await app.inject({ ...request, headers: { authorization: `Bearer ${fresh}` } })).statusCode,
+    ).toBe(403);
   });
 
-  it('多角色权限取并集；每次授权只执行一次角色菜单查询', async () => {
+  it('多角色权限取并集；鉴权阶段不查库，只在登录时算一次', async () => {
     roles = [assignment('reader'), assignment('editor', ['system:user:edit'])];
+    findUnique.mockClear();
+    const fresh = await login();
+    // 登录：一次用户有效性检查 + 一次授权关系查询。
+    expect(findUnique.mock.calls).toHaveLength(2);
+    expect(findUnique.mock.calls.filter(([query]) => query.select.roles)).toHaveLength(1);
     findUnique.mockClear();
     const response = await app.inject({
       url: '/api/rbac-probe/and',
-      headers: { authorization: `Bearer ${token}` },
+      headers: { authorization: `Bearer ${fresh}` },
     });
     expect(response.statusCode).toBe(200);
-    expect(findUnique.mock.calls.filter(([query]) => query.select.roles)).toHaveLength(1);
-    expect(findUnique.mock.calls).toHaveLength(2); // 认证用户检查 + 授权查询。
+    // 鉴权：只剩认证阶段的用户有效性检查，不再读角色菜单关系。
+    expect(findUnique.mock.calls).toHaveLength(1);
+    expect(findUnique.mock.calls[0][0].select).not.toHaveProperty('roles');
   });
 
   it('请求参数中的角色/权限不能影响服务端授权', async () => {
     roles = [];
+    const denied = await login();
     const response = await app.inject({
       url: '/api/rbac-probe/list?userId=2&role=admin&permissions=system:user:list',
-      headers: { authorization: `Bearer ${token}` },
+      headers: { authorization: `Bearer ${denied}` },
     });
     expect(response.statusCode).toBe(403);
-    expect(findUnique.mock.lastCall?.[0]).toMatchObject({ where: { userId: 1n } });
+    expect(findUnique.mock.lastCall?.[0]).toMatchObject({ where: { userId: 2n } });
   });
 
-  it('权限数据库查询故障返回统一 503，不沿用之前的授权结果', async () => {
-    const request = { url: '/api/rbac-probe/list', headers: { authorization: `Bearer ${token}` } };
-    expect((await app.inject(request)).statusCode).toBe(200);
+  it('登录时授权查询故障返回统一 503，不签发降级会话', async () => {
     authorizationUnavailable = true;
-    const response = await app.inject(request);
-    expect(response.statusCode).toBe(503);
-    expect(response.json()).toMatchObject({ code: 503, data: null });
-    expect(response.body).not.toContain('private database detail');
+    await expect(login()).rejects.toMatchObject({ status: 503 });
+    // 之前的会话仍然有效，不会因为一次登录失败被清空。
+    expect(
+      (await app.inject({ url: '/api/rbac-probe/list', headers: { authorization: `Bearer ${token}` } }))
+        .statusCode,
+    ).toBe(200);
   });
 
   it('撤销当前会话后 Access JWT 立即失效', async () => {

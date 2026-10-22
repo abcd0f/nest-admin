@@ -28,9 +28,10 @@ export class PermissionGuard implements CanActivate {
     );
     const authenticated = this.reflector.getAllAndOverride<boolean>(AUTHENTICATED_ROUTE, targets);
     // 类和方法上的每条要求均须通过；仅登录标记不能覆盖已有要求。
+    // 授权判定读取会话快照，不再查库；权限变更由写操作撤销相关会话。
     if (
       (!required.length && !authenticated) ||
-      (required.length && !(await this.permissions.isAllowed(user.userId, required)))
+      (required.length && !this.permissions.isAllowed(user, required))
     ) {
       throw new ForbiddenException('无访问权限');
     }

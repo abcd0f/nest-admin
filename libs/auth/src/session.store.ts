@@ -1,3 +1,4 @@
+import type { AuthSnapshot } from './auth.types.js';
 import { RedisService } from '@app/cache';
 import {
   Inject,
@@ -7,11 +8,15 @@ import {
 } from '@nestjs/common';
 import { isUserId } from './auth.types.js';
 
-export interface AuthSession {
+export interface AuthSession extends AuthSnapshot {
   userId: string;
   refreshHash: string;
   /** 毫秒时间戳，刷新时保持不变。 */
   expiresAt: number;
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
 }
 
 // 仅消费命中过的摘要才会加入重放集合；伪造摘要不会撤销受害者的会话。
@@ -55,6 +60,11 @@ export class SessionStore {
     return `auth:used:${sid}`;
   }
 
+  /** 按用户维护的会话索引，用于权限快照失效时批量踢人。 */
+  private userKey(userId: string): string {
+    return `auth:user:${userId}`;
+  }
+
   async create(sid: string, session: AuthSession): Promise<void> {
     const ttl = session.expiresAt - Date.now();
     if (ttl <= 0) throw new UnauthorizedException('未认证');
@@ -62,6 +72,16 @@ export class SessionStore {
       this.redis.setIfAbsent(this.sessionKey(sid), JSON.stringify(session), ttl),
     );
     if (!created) throw new ServiceUnavailableException('认证服务不可用');
+    // 索引与 TTL 一并写入；失败时抛出，由调用方重试登录，不留无法撤销的会话。
+    await this.execute(() =>
+      this.redis.execute((client) =>
+        client
+          .multi()
+          .sAdd(this.redis.key(this.userKey(session.userId)), sid)
+          .pExpire(this.redis.key(this.userKey(session.userId)), ttl)
+          .exec(),
+      ),
+    );
   }
 
   async get(sid: string): Promise<AuthSession> {
@@ -75,7 +95,9 @@ export class SessionStore {
         !isUserId(session.userId) ||
         typeof session.refreshHash !== 'string' ||
         !/^[a-f0-9]{64}$/.test(session.refreshHash) ||
-        !Number.isSafeInteger(session.expiresAt)
+        !Number.isSafeInteger(session.expiresAt) ||
+        !isStringArray(session.roles) ||
+        !isStringArray(session.permissions)
       ) {
         throw new Error('invalid session');
       }
@@ -100,5 +122,27 @@ export class SessionStore {
 
   async revoke(sid: string): Promise<void> {
     await this.execute(() => this.redis.del(this.sessionKey(sid), this.usedKey(sid)));
+  }
+
+  /**
+   * 撤销某个用户的全部设备会话，返回被撤销的数量。
+   *
+   * 对应 RuoYi `SysRoleServiceImpl.cleanOnlineUser`：权限快照在会话里，变更后必须踢人，
+   * 否则旧权限会一直有效到会话过期。索引里残留的已过期 sid 直接删除，不单独判断。
+   */
+  async revokeUser(userId: string): Promise<number> {
+    if (!isUserId(userId)) throw new UnauthorizedException('未认证');
+    return this.execute(async () => {
+      const indexKey = this.redis.key(this.userKey(userId));
+      const sids = await this.redis.execute((client) => client.sMembers(indexKey));
+      if (!sids.length) return 0;
+      const keys = sids.flatMap((sid) => [
+        this.redis.key(this.sessionKey(sid)),
+        this.redis.key(this.usedKey(sid)),
+      ]);
+      keys.push(indexKey);
+      await this.redis.execute((client) => client.unlink(keys));
+      return sids.length;
+    });
   }
 }

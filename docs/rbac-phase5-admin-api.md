@@ -1,5 +1,12 @@
 # RBAC 阶段 5：管理 API
 
+> **⚠️ 两处描述已被取代（2026-10-22）。**
+>
+> 1. **"最后一位管理员"保护已移除。** 不再有 `managementPermissions` 清单，也不再在事务内比较写入前后的管理员存在性。现在与 RuoYi 一致，只靠"1 号超管账号不可改/删/停用"兜底。
+> 2. **权限载体改为登录快照。** 管理写操作提交后会调用 `revokeUserSessions` 撤销受影响用户的会话；下文第 66 行"管理员检查"相关表述不再适用。
+>
+> 当前实现以 `docs/rbac-compare-ruoyi-plus.md` 第 3、5 节为准。
+
 阶段 5 在 `apps/gateway/src/modules/system` 加入 `user`、`role`、`menu`、`dept` 四个业务模块，均通过 `PrismaService` 使用现有 Prisma 模型。`SystemModule` 同时继续注册认证端点和示例模块。四个模型的 `updateTime` 使用 Prisma `@updatedAt` 客户端指令；没有修改数据库字段、表结构或迁移，也没有写入业务数据或创建默认管理员。
 
 所有路由位于全局 `/api` 前缀下。管理读写端点默认要求认证，且每个 controller 方法均声明独立 `system:<resource>:<action>` 权限。成功响应沿用 `{ code: 0, data, message }`；BigInt ID 输入、输出都使用十进制字符串；列表使用 `{ items, meta }` 分页包装；响应 DTO 以 `@Exclude()` 和字段级 `@Expose()` 控制字段，ID 通过 `@Type(() => String)` 转换，日期统一使用 `@DateFormat()`（`YYYY-MM-DD HH:mm:ss`，Asia/Shanghai）。用户响应不返回密码、登录 IP、登录时间或令牌信息。服务响应分别通过 `toDto`、`toDtoList` 和 `toPageDto` 映射。

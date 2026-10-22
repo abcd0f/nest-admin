@@ -1,12 +1,13 @@
 import type { AuthenticatedUser } from '@app/auth';
 import type { Prisma } from '@app/database/generated/prisma/client.js';
-import { isUserId } from '@app/auth';
+import { AuthService, isUserId } from '@app/auth';
 import { toDto, toPageDto } from '@app/common';
 import { BusinessException } from '@app/core';
 import { PasswordHashService } from '@app/crypto';
 import { paginate, PrismaService } from '@app/database';
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { ensureAdministratorRemains, hasActiveAdministrator } from '../administrator.js';
+import { revokeSessions } from '../session-invalidation.js';
+import { assertNotSuperAdmin } from '../super-admin.js';
 import {
   AssignUserRolesDto,
   CreateUserDto,
@@ -35,6 +36,7 @@ export class UserService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(PasswordHashService) private readonly passwords: PasswordHashService,
+    @Inject(AuthService) private readonly auth: AuthService,
   ) {}
 
   async findAll(query: UserQueryDto) {
@@ -122,6 +124,7 @@ export class UserService {
   async update(id: string, body: UpdateUserDto, actor: AuthenticatedUser) {
     if (!isUserId(id))
       throw BusinessException.validation([{ field: 'id', messages: ['用户 ID 无效'] }]);
+    assertNotSuperAdmin(id);
     if (body.deptId != null && !isUserId(body.deptId)) {
       throw BusinessException.validation([{ field: 'deptId', messages: ['部门 ID 无效'] }]);
     }
@@ -137,7 +140,6 @@ export class UserService {
         if (!current) throw new NotFoundException('用户不存在');
         if (id === actor.userId && body.status === '1')
           throw new ConflictException('不能停用当前用户');
-        const hadAdministrator = body.status === '1' ? await hasActiveAdministrator(tx) : false;
         if (
           body.userName !== undefined &&
           (await tx.user.count({
@@ -178,17 +180,19 @@ export class UserService {
           },
           select: userSelect,
         });
-        await ensureAdministratorRemains(tx, hadAdministrator);
         return updated;
       },
       { isolationLevel: 'Serializable' },
     );
+    // 状态变更后旧会话里的权限快照不再可信，撤销该用户全部设备会话。
+    if (body.status !== undefined) await revokeSessions(this.auth, [userId]);
     return toDto(UserResponseDto, { ...row, roleIds: row.roles.map((role) => role.roleId) })!;
   }
 
   async assignRoles(id: string, body: AssignUserRolesDto, actor: AuthenticatedUser) {
     if (!isUserId(id))
       throw BusinessException.validation([{ field: 'id', messages: ['用户 ID 无效'] }]);
+    assertNotSuperAdmin(id);
     if (body.roleIds.some((roleId) => !isUserId(roleId))) {
       throw BusinessException.validation([{ field: 'roleIds', messages: ['角色 ID 无效'] }]);
     }
@@ -210,11 +214,9 @@ export class UserService {
             { field: 'roleIds', messages: ['包含不存在、停用或已删除的角色'] },
           ]);
         }
-        const hadAdministrator = await hasActiveAdministrator(tx);
         await tx.userRole.deleteMany({ where: { userId } });
         if (ids.length)
           await tx.userRole.createMany({ data: ids.map((roleId) => ({ userId, roleId })) });
-        await ensureAdministratorRemains(tx, hadAdministrator);
         return tx.user.update({
           where: { userId },
           data: { updateBy: BigInt(actor.userId) },
@@ -223,12 +225,15 @@ export class UserService {
       },
       { isolationLevel: 'Serializable' },
     );
+    // 角色集合变了，快照必须作废；用户下次登录才会拿到新权限。
+    await revokeSessions(this.auth, [userId]);
     return toDto(UserResponseDto, { ...row, roleIds: row.roles.map((role) => role.roleId) })!;
   }
 
   async remove(id: string, actor: AuthenticatedUser): Promise<void> {
     if (!isUserId(id))
       throw BusinessException.validation([{ field: 'id', messages: ['用户 ID 无效'] }]);
+    assertNotSuperAdmin(id);
     const userId = BigInt(id);
     await this.prisma.$transaction(
       async (tx) => {
@@ -241,15 +246,15 @@ export class UserService {
         if (await tx.dept.count({ where: { leaderId: userId, delFlag: '0' } })) {
           throw new ConflictException('用户仍是部门负责人，请先更换负责人');
         }
-        const hadAdministrator = await hasActiveAdministrator(tx);
         await tx.userRole.deleteMany({ where: { userId } });
         await tx.user.update({
           where: { userId },
           data: { delFlag: '2', updateBy: BigInt(actor.userId) },
         });
-        await ensureAdministratorRemains(tx, hadAdministrator);
       },
       { isolationLevel: 'Serializable' },
     );
+    // 用户已逻辑删除，残留会话必须立即失效。
+    await revokeSessions(this.auth, [userId]);
   }
 }

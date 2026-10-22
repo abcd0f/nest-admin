@@ -1,11 +1,11 @@
 import type { AuthenticatedUser } from '@app/auth';
 import type { Prisma } from '@app/database/generated/prisma/client.js';
-import { isUserId } from '@app/auth';
+import { AuthService, isUserId } from '@app/auth';
 import { toDto, toDtoList, toTree } from '@app/common';
 import { BusinessException } from '@app/core';
 import { PrismaService } from '@app/database';
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { ensureAdministratorRemains, hasActiveAdministrator } from '../administrator.js';
+import { revokeSessions, usersOfMenu } from '../session-invalidation.js';
 import { CreateMenuDto, MenuResponseDto, MenuTreeDto, UpdateMenuDto } from './dto/menu.dto.js';
 
 const menuSelect = {
@@ -50,7 +50,10 @@ function checkPerms(type: string, perms: string | null | undefined) {
 
 @Injectable()
 export class MenuService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(AuthService) private readonly auth: AuthService,
+  ) {}
 
   async findAll(): Promise<MenuTreeDto[]> {
     const rows = await this.prisma.menu.findMany({
@@ -141,10 +144,6 @@ export class MenuService {
         checkPerms(type, perms);
         for (const child of nodes.filter((node) => node.parentId === menuId))
           checkType(child.menuType, type);
-        const hadAdministrator =
-          body.status === '1' || body.menuType === 'M' || body.perms !== undefined
-            ? await hasActiveAdministrator(tx)
-            : false;
         const updated = await tx.menu.update({
           where: { menuId },
           data: {
@@ -166,11 +165,14 @@ export class MenuService {
           },
           select: menuSelect,
         });
-        await ensureAdministratorRemains(tx, hadAdministrator);
         return updated;
       },
       { isolationLevel: 'Serializable' },
     );
+    // 菜单状态或权限码变了，引用它的角色下所有用户的快照作废。
+    if (body.status !== undefined || body.perms !== undefined) {
+      await revokeSessions(this.auth, await usersOfMenu(this.prisma, menuId));
+    }
     return toDto(MenuResponseDto, row)!;
   }
 
@@ -186,9 +188,7 @@ export class MenuService {
           throw new ConflictException('菜单仍有子节点');
         if (await tx.roleMenu.count({ where: { menuId } }))
           throw new ConflictException('菜单仍被角色引用，请先解除关联');
-        const hadAdministrator = await hasActiveAdministrator(tx);
         await tx.menu.delete({ where: { menuId } });
-        await ensureAdministratorRemains(tx, hadAdministrator);
       },
       { isolationLevel: 'Serializable' },
     );

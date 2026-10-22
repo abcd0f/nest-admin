@@ -1,3 +1,4 @@
+import type { AuthenticatedUser } from '@app/auth';
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ExecutionContextHost } from '@nestjs/core/helpers/execution-context-host';
@@ -58,11 +59,17 @@ function setup(
   permissions: string[],
   roles: string[],
 ) {
-  const getAuthorization = vi.fn().mockResolvedValue({ permissions, roles });
-  const guard = new PermissionGuard(new Reflector(), new PermissionService({ getAuthorization }));
-  const request = { user: { userId: '1' } };
+  // 权限来自认证阶段带出的会话快照，守卫本身不查库。
+  const source = vi.fn();
+  const guard = new PermissionGuard(
+    new Reflector(),
+    new PermissionService({ getAuthorization: source } as never),
+  );
+  const request: { user?: AuthenticatedUser } = {
+    user: { userId: '1', userName: 'alice', nickName: 'Alice', deptId: null, sessionId: 'sid', roles, permissions },
+  };
   const context = new ExecutionContextHost([request], controller, controller.prototype[method]);
-  return { guard, context, request, getAuthorization };
+  return { guard, context, request, source };
 }
 
 describe('权限与角色注解组合', () => {
@@ -106,7 +113,8 @@ describe('权限与角色注解组合', () => {
     for (const method of ['either', 'profile'] as const) {
       const value = setup(RestrictedController, method, ['a'], []);
       await expect(value.guard.canActivate(value.context)).rejects.toThrow(ForbiddenException);
-      value.getAuthorization.mockResolvedValue({ permissions: ['a'], roles: ['admin'] });
+      // 换成带 admin 角色的快照即可通过，守卫只读这份快照。
+      value.request.user = { ...value.request.user!, roles: ['admin'] };
       expect(await value.guard.canActivate(value.context)).toBe(true);
     }
     // 派生类的声明不能污染基类。
@@ -114,23 +122,23 @@ describe('权限与角色注解组合', () => {
     expect(await base.guard.canActivate(base.context)).toBe(true);
   });
 
-  it('重复注解只查询一次权限/角色，使用可信的用户 ID', async () => {
+  it('授权判定不查库，只读会话快照', async () => {
     const value = setup(ProbeController, 'stackedFallback', ['c'], ['admin']);
     expect(await value.guard.canActivate(value.context)).toBe(true);
-    expect(value.getAuthorization).toHaveBeenCalledExactlyOnceWith('1');
+    expect(value.source).not.toHaveBeenCalled();
   });
 
-  it('角色查询失败不能当成空角色或放行', async () => {
-    const value = setup(ProbeController, 'fallback', ['a', 'b'], []);
-    value.getAuthorization.mockRejectedValue(new Error('role source unavailable'));
-    await expect(value.guard.canActivate(value.context)).rejects.toThrow('role source unavailable');
+  it('快照缺少所需角色时拒绝，不会退化为空角色放行', async () => {
+    const value = setup(ProbeController, 'combined', ['a'], ['auditor']);
+    await expect(value.guard.canActivate(value.context)).rejects.toThrow(ForbiddenException);
+    expect(value.source).not.toHaveBeenCalled();
   });
 
-  it('缺少认证用户时不查询权限', async () => {
+  it('缺少认证用户时不进入授权判定', async () => {
     const value = setup(ProbeController, 'either', [], []);
     Reflect.deleteProperty(value.request, 'user');
     await expect(value.guard.canActivate(value.context)).rejects.toThrow(UnauthorizedException);
-    expect(value.getAuthorization).not.toHaveBeenCalled();
+    expect(value.source).not.toHaveBeenCalled();
   });
 
   it('启动时拒绝空值、通配符和非法 mode，不静默降级', () => {

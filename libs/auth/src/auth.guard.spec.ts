@@ -32,12 +32,15 @@ class OpenController {
 }
 
 function setup(method: keyof ProbeController, header?: string, user?: AuthenticatedUser) {
-  const verifiedUser = {
+  // 认证阶段从会话快照带出的用户；权限判定只读这份数据。
+  const verifiedUser: AuthenticatedUser = {
     userId: '1',
     userName: 'alice',
     nickName: 'Alice',
     deptId: null,
     sessionId: 'sid',
+    roles: [],
+    permissions: ['system:user:list', 'class:resource:read'],
   };
   const request = { headers: { authorization: header }, user };
   const context = new ExecutionContextHost(
@@ -46,20 +49,19 @@ function setup(method: keyof ProbeController, header?: string, user?: Authentica
     ProbeController.prototype[method],
   );
   const authenticate = vi.fn().mockResolvedValue(verifiedUser);
-  const getAuthorization = vi.fn().mockResolvedValue({
-    permissions: ['system:user:list', 'class:resource:read'],
-    roles: [],
-  });
+  // PermissionSource 只在登录时使用，鉴权阶段不应被调用。
+  const source = vi.fn();
   const authentication = new AuthGuard(new Reflector(), { authenticate } as never);
   const authorization = new PermissionGuard(
     new Reflector(),
-    new PermissionService({ getAuthorization }),
+    new PermissionService({ getAuthorization: source } as never),
   );
   return {
     request,
     context,
     authenticate,
-    getAuthorization,
+    source,
+    verifiedUser,
     // 单元测试串行调用两个守卫；实际 AppModule 注册顺序由 HTTP e2e 验证。
     guard: {
       async canActivate(context: ExecutionContextHost) {
@@ -75,7 +77,7 @@ describe('认证与权限守卫', () => {
     expect(await value.guard.canActivate(value.context)).toBe(true);
     expect(value.request.user).toBeUndefined();
     expect(value.authenticate).not.toHaveBeenCalled();
-    expect(value.getAuthorization).not.toHaveBeenCalled();
+    expect(value.source).not.toHaveBeenCalled();
   });
 
   it.each([undefined, '', 'Basic abc', 'Bearer', 'Bearer a b'])(
@@ -83,34 +85,31 @@ describe('认证与权限守卫', () => {
     async (header) => {
       const value = setup('list', header);
       await expect(value.guard.canActivate(value.context)).rejects.toThrow(UnauthorizedException);
-      expect(value.getAuthorization).not.toHaveBeenCalled();
+      expect(value.source).not.toHaveBeenCalled();
     },
   );
 
-  it('先认证后授权，使用可信用户 ID；方法与类权限同时生效', async () => {
+  it('先认证后授权，权限来自会话快照且不查库；方法与类权限同时生效', async () => {
     const value = setup('list', 'Bearer token');
     expect(await value.guard.canActivate(value.context)).toBe(true);
     expect(value.authenticate).toHaveBeenCalledExactlyOnceWith('token');
-    expect(value.getAuthorization).toHaveBeenCalledExactlyOnceWith('1');
-    expect(value.authenticate.mock.invocationCallOrder[0]).toBeLessThan(
-      value.getAuthorization.mock.invocationCallOrder[0],
-    );
+    expect(value.source).not.toHaveBeenCalled();
   });
 
-  it('认证失败时不执行权限查询，缺少权限时返回 403', async () => {
+  it('认证失败时不执行授权，快照缺少权限时返回 403', async () => {
     const value = setup('list', 'Bearer token');
     value.authenticate.mockRejectedValueOnce(new UnauthorizedException());
     await expect(value.guard.canActivate(value.context)).rejects.toThrow(UnauthorizedException);
-    expect(value.getAuthorization).not.toHaveBeenCalled();
-    value.getAuthorization.mockResolvedValueOnce({ permissions: [], roles: [] });
+    expect(value.source).not.toHaveBeenCalled();
+    value.authenticate.mockResolvedValueOnce({ ...value.verifiedUser, permissions: [], roles: [] });
     await expect(value.guard.canActivate(value.context)).rejects.toThrow(ForbiddenException);
   });
 
   it('仅登录策略不能清除类权限；无策略的路由拒绝访问', async () => {
     const value = setup('profile', 'Bearer token');
     expect(await value.guard.canActivate(value.context)).toBe(true);
-    expect(value.getAuthorization).toHaveBeenCalledExactlyOnceWith('1');
-    value.getAuthorization.mockResolvedValueOnce({ permissions: [], roles: [] });
+    expect(value.source).not.toHaveBeenCalled();
+    value.authenticate.mockResolvedValueOnce({ ...value.verifiedUser, permissions: [], roles: [] });
     await expect(value.guard.canActivate(value.context)).rejects.toThrow(ForbiddenException);
     class UnmarkedController {
       update() {}
@@ -121,6 +120,17 @@ describe('认证与权限守卫', () => {
       UnmarkedController.prototype.update,
     );
     await expect(value.guard.canActivate(context)).rejects.toThrow(ForbiddenException);
+  });
+
+  it('快照里的通配权限可满足任意要求', async () => {
+    const value = setup('list', 'Bearer token');
+    value.authenticate.mockResolvedValueOnce({
+      ...value.verifiedUser,
+      permissions: ['*:*:*'],
+      roles: ['superadmin'],
+    });
+    expect(await value.guard.canActivate(value.context)).toBe(true);
+    expect(value.source).not.toHaveBeenCalled();
   });
 
   it('方法 Public(false) 恢复类级公开路由的认证要求', async () => {

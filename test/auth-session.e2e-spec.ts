@@ -77,7 +77,10 @@ describe.skipIf(!testUrl)('真实 Redis 会话与原子刷新 (e2e)', () => {
   });
 
   async function login() {
-    const pair = await auth.createSession('1');
+    const pair = await auth.createSession('1', {
+      roles: ['operator'],
+      permissions: ['system:user:list'],
+    });
     created.push(pair.refreshToken.split('.')[0]);
     return pair;
   }
