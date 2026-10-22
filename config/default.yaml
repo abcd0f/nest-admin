@@ -16,7 +16,7 @@ app:
 auth:
   # 必填密钥不设默认值；在 config/<环境>.local.yaml 或部署密钥挂载中配置 jwt-secret
   # 使用至少 32 字节的密码学随机密钥，缺失或过短会阻止启动
-  jwt-secret: abcdefghijklmnopqrstuvwxyz
+  jwt-secret: abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz
   # Access JWT 只允许 HS256，签名和验证使用同一算法
   jwt-algorithm: HS256
   # 签发方；验证时必须一致

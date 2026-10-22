@@ -15,6 +15,7 @@ export class SwaggerService {
       .setTitle(this.config.title)
       .setDescription(this.config.description)
       .setVersion(this.config.version)
+      .addBearerAuth()
       .build();
 
     SwaggerModule.setup(
