@@ -1,12 +1,16 @@
+/* eslint-disable perfectionist/sort-imports -- 配置 mock 必须先于 AppModule 导入。 */
+import './helpers/auth-config-source.js';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setImmediate } from 'node:timers/promises';
+import { Public } from '@app/auth';
 import { createFastifyAdapter } from '@app/common';
 import { HTTP_LOG_TEST_SECRETS_PATTERN } from '@app/common/constants/regex.js';
 import { loggerConfig, redisConfig } from '@app/config';
 import { AllExceptionsFilter, RawResponse } from '@app/core';
+import { PrismaService } from '@app/database';
 import { LoggerService, PinoLogger } from '@app/logger';
 import { BadRequestException, ConsoleLogger, Controller, Get, Inject, Logger, Post, Req } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -17,8 +21,10 @@ import { AppModule } from '../apps/gateway/src/app.module.js';
 import { loggerDomain } from '../libs/config/src/domains/logger.domain.js';
 import { redisDomain } from '../libs/config/src/domains/redis.domain.js';
 import { readLogRecords } from './helpers/read-log-records.js';
+/* eslint-enable perfectionist/sort-imports */
 
 @Controller('log-probe')
+@Public()
 @RawResponse()
 class LogProbeController {
   constructor(@Inject(PinoLogger) private readonly logger: PinoLogger) {}
@@ -72,6 +78,8 @@ describe('Gateway Fastify 日志链路 (e2e)', () => {
     Reflect.defineMetadata('design:paramtypes', [HttpAdapterHost], AllExceptionsFilter);
     const config = loggerDomain.parse({ console: { enabled: false }, file: { directory } }, { environment: 'test' });
     const module = await Test.createTestingModule({ imports: [AppModule], controllers: [LogProbeController] })
+      .overrideProvider(PrismaService)
+      .useValue({})
       .overrideProvider(redisConfig.KEY)
       .useValue(redisDomain.parse({ enabled: false }, { environment: 'test' }))
       .overrideProvider(loggerConfig.KEY)

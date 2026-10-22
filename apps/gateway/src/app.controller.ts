@@ -1,3 +1,4 @@
+import { Public } from '@app/auth';
 import { RawResponse } from '@app/core';
 import { Controller, Get } from '@nestjs/common';
 
@@ -10,6 +11,7 @@ export class AppController {
    * @remarks 用于验证网关服务是否正常运行。
    */
   @Get()
+  @Public()
   @RawResponse()
   getHello(): string {
     return '欢迎使用 Nest.js 构建的 API 接口服务！';

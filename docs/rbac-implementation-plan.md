@@ -13,7 +13,7 @@
 - `prisma/models/menu.prisma`：`Menu` 可表示目录（`M`）、菜单（`C`）和按钮（`F`），`perms` 用于操作权限标识。
 - `prisma/models/dept.prisma`：部门具有 `parentId` 与含自身的 `ancestors` 路径，可供部门树及下级范围计算使用。
 - `prisma/models/relations.prisma`：已有用户-角色、角色-菜单、角色-部门关联表，复合主键和级联删除均已定义。
-- `libs/auth` 与 `libs/permission` 已注册为 workspace library，但目前只有空服务和模块；没有实现认证或权限守卫。
+- `libs/auth` 与 `libs/permission` 已在阶段 2 接入 JWT/会话、认证守卫、权限策略与守卫；实际角色菜单查询留给阶段 3。
 - `apps/gateway/src/modules/system/system.module.ts` 当前全局导入 `ExampleModule`。示例展示 controller/service/module/dto 的目录和 ESM `.js` 导入约定。
 - `DatabaseModule` 全局提供 `PrismaService`；`CacheModule` 全局提供 Redis 能力；`CryptoModule` 和 `CoreModule` 注册全局守卫、异常过滤器与响应拦截器。
 - 阶段 1 已新增唯一 JWT 直接依赖 `@nestjs/jwt`；`libs/crypto` 提供 Argon2id 密码哈希服务。
@@ -112,16 +112,18 @@
 
 实现清单、字段/唯一性限制、开发库只读核验、配置表、本地密钥准备、ID/分页约定和验证结果见 [阶段 1 基线](./rbac-phase1-foundation.md)。`authConfig` 已加入启动解析/校验和 DI 导出；后续阶段再向认证库注册 `JwtModule`、守卫及业务接口。
 
-### 阶段 2：建立认证与权限库基础
+### 阶段 2：建立认证与权限库基础（已完成）
 
 1. 在 `libs/auth` 实现认证上下文类型、JWT 适配、公开接口元数据、认证守卫和服务接口；在 `libs/permission` 实现权限声明元数据、功能守卫和权限服务接口。
-2. 以 Nest `Reflector` 读取 handler/class 元数据，明确方法级配置覆盖类级配置的规则。
+2. 以 Nest `Reflector` 读取 handler/class 元数据：`Public` 方法配置覆盖类配置；权限与角色要求跨类/方法、跨注解固定 AND，单条注解内由 `mode` 控制 AND/OR（默认 AND），`role` 仅兜底当前权限注解。
    同步接入当前尚缺少的全局 DTO 校验管道，校验失败沿用现有 422 字段错误结构。
 3. 按全局守卫顺序接入认证与授权：公开接口跳过认证；其余请求先认证，再授权。核对 `CryptoModule`、`CoreModule` 的现有 `APP_GUARD`，确保 guard 顺序可预测，异常经过现有异常过滤器。
 4. 为登录、刷新、退出和获取当前用户信息定义 DTO 与统一响应。Refresh Token 放入 Redis 的键空间、TTL、轮换和撤销机制写出明确语义。
 5. 编写守卫与令牌单元测试：缺失/无效/过期令牌、公开路由、禁用/删除用户、刷新轮换、退出撤销和令牌重放。
 
 **验收：** 守卫能在隔离测试中稳定区分公开、未认证、已认证及无权访问；测试不依赖真实数据库或 Redis。
+
+已在 `AppModule` 直接导入认证/权限模块并按序注册两个全局守卫，无单独的 AccessControlModule；已交付认证/权限/角色装饰器、JWT 与 Redis 会话服务、认证 DTO 和全局 422 校验。隔离测试使用 mock；另提供真实 Redis 原子性测试和实际网关 HTTP 测试。接口、会话协议、测试方式及阶段边界见 [阶段 2 说明](./rbac-phase2-auth-foundation.md)。当前默认权限源返回空权限和空角色，阶段 3 再替换为实际 Prisma 查询实现。
 
 ### 阶段 3：实现用户权限加载和功能授权
 

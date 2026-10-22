@@ -1,3 +1,5 @@
+/* eslint-disable perfectionist/sort-imports -- 配置 mock 必须先于 AppModule 导入。 */
+import './helpers/auth-config-source.js';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import type { Socket } from 'node:net';
 import { randomUUID } from 'node:crypto';
@@ -5,6 +7,7 @@ import { createServer } from 'node:net';
 import { CACHE_MANAGER, CacheModule, CacheService, RedisClient, RedisLockBusyError, RedisLockLostError, RedisService } from '@app/cache';
 import { createFastifyAdapter } from '@app/common';
 import { loggerConfig, redisConfig } from '@app/config';
+import { PrismaService } from '@app/database';
 import { Test } from '@nestjs/testing';
 import { createClient } from 'redis';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -13,6 +16,7 @@ import { deleteByPrefix } from '../libs/cache/src/cache.utils.js';
 import { SharedRedisStore } from '../libs/cache/src/redis.store.js';
 import { loggerDomain } from '../libs/config/src/domains/logger.domain.js';
 import { redisDomain } from '../libs/config/src/domains/redis.domain.js';
+/* eslint-enable perfectionist/sort-imports */
 
 const context = { environment: 'test' } as const;
 const testUrl = process.env.REDIS_TEST_URL;
@@ -38,6 +42,8 @@ function testConfig() {
 async function createApp(config: ReturnType<typeof redisDomain.parse>) {
   // 重复导入静态模块也必须只产生一个连接所有者。
   const module = await Test.createTestingModule({ imports: [AppModule, CacheModule] })
+    .overrideProvider(PrismaService)
+    .useValue({})
     .overrideProvider(redisConfig.KEY)
 .useValue(config)
     .overrideProvider(loggerConfig.KEY)
