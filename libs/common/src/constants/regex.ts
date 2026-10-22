@@ -1,12 +1,6 @@
 /** Base64 编码格式，保留大小写不敏感匹配。 */
 export const BASE64_PATTERN = /^(?:[A-Z0-9+/]{4})*(?:[A-Z0-9+/]{2}==|[A-Z0-9+/]{3}=)?$/i;
 
-/** Redis 键前缀：由冒号分隔的非空字母、数字、下划线或短横线段。 */
-export const REDIS_KEY_PREFIX_PATTERN = /^[\w-]+(?::[\w-]+)*$/;
-
-/** Redis 客户端名称（CLIENT SETNAME）：字母、数字、下划线、短横线或点。 */
-export const REDIS_CONNECTION_NAME_PATTERN = /^[\w.-]+$/;
-
 /** Prisma 错误码：P 后跟四位数字。 */
 export const PRISMA_ERROR_CODE_PATTERN = /^P\d{4}$/;
 
