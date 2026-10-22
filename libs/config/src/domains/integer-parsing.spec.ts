@@ -50,8 +50,7 @@ describe('配置整数域规则', () => {
   });
 
   it('非负字段接受 0，但空白字符串不能代替 0', () => {
-    expect(redisDomain.parse({ db: '0', 'max-retries-per-request': 0 }, context))
-      .toMatchObject({ db: 0, maxRetriesPerRequest: 0 });
+    expect(redisDomain.parse({ db: '0' }, context)).toMatchObject({ db: 0 });
     expect(throttlerDomain.parse({ 'block-duration': '0' }, context).blockDuration).toBe(0);
     expect(() => redisDomain.parse({ db: ' ' }, context)).toThrow('redis.db: 必须是整数');
     expect(() => throttlerDomain.parse({ 'block-duration': '' }, context)).toThrow('throttler.block-duration: 必须是整数');

@@ -18,6 +18,10 @@ database:
   log-queries: false
   url: postgresql://root:123456@localhost:5432/nest-admin?schema=public
 
+redis:
+  # 与开发环境隔离；凭据通过 production.local.yaml 挂载
+  key-prefix: nest-admin:production
+
 logger:
   console:
     # 生产环境默认使用 JSON，便于日志平台采集；可覆盖为 true 开启彩色

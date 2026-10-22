@@ -37,6 +37,33 @@ database:
   # 是否打印 SQL 日志。生产环境务必保持 false
   log-queries: false
 
+redis:
+  # 总开关；关闭时缓存不存储数据，严格 Redis 操作报未就绪
+  enabled: true
+  # Redis 单实例地址；每个应用进程只创建一个连接
+  host: 127.0.0.1
+  # Redis TCP 端口
+  port: 6379
+  # Redis 逻辑数据库编号
+  db: 0
+  # 应用/环境隔离前缀；内部另分 cache、data、lock 命名空间
+  key-prefix: nest-admin
+  # 默认缓存 TTL，单位毫秒；单次调用可传 0 表示永不过期
+  ttl: 60000
+  # 完整启动连接超时，单位毫秒
+  connect-timeout: 5000
+  # 服务层完整调用时限及原生客户端发送前排队时限，单位毫秒
+  command-timeout: 2000
+  # 运行期重连的起始延迟，指数退避至 30 秒并增加抖动
+  retry-delay: 1000
+  # 在途命令队列上限；断线期间不排队、不自动重放写入
+  commands-queue-max-length: 1000
+  # 是否使用 TLS；开启时使用 Node 系统证书校验
+  tls: false
+  # 可选 ACL 用户；密码放在 config/<环境>.local.yaml
+  # username: default
+  # password: your-password
+
 logger:
   # 全局最低日志级别：trace / debug / info / warn / error / fatal
   level: info

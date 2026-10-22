@@ -11,6 +11,12 @@ database:
   log-queries: true
   url: postgresql://root:123456@localhost:5432/nest-admin?schema=public
 
+redis:
+  # 本地 Redis 访问密码
+  password: '123456'
+  # 与生产环境隔离
+  key-prefix: nest-admin:development
+
 logger:
   # 开发环境记录 debug 及以上日志
   level: debug

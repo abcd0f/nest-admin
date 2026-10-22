@@ -57,6 +57,10 @@ $ pnpm run test:e2e
 $ pnpm run test:cov
 ```
 
+## Redis 与缓存
+
+网关已全局注册 `@app/cache`，直接注入 `CacheService` 使用 JSON 缓存，注入 `RedisService` 使用会话、一次性令牌、原子计数、租约锁与原生数据结构；整个应用共用一个连接。配置、示例、故障语义和单连接边界见 [Redis 模块文档](libs/cache/README.md)。
+
 ## Swagger 接口文档
 
 启动 `pnpm start:dev` 后，开发环境默认地址：
