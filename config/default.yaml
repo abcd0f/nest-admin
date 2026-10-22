@@ -29,6 +29,8 @@ redis:
   enabled: false
   # 默认缓存时长，单位毫秒；1..2147483647，禁止 0/永久缓存
   ttl: 60000
+  # 默认 TTL 的随机抖动百分比，0..100；用于打散同时写入的缓存过期时间，0 表示关闭
+  ttl-jitter: 0
   # 单机 Redis 地址，独立环境使用各自的差异层覆盖
   host: 127.0.0.1
   # TCP 端口，1..65535
@@ -38,18 +40,30 @@ redis:
   # password: 由部署平台注入，不要提交真实密码
   # 数据库编号，非负整数；服务器必须已配置该数据库
   db: 0
-  # Keyv 命名空间；最终键形如 nest-admin:cache:users:v1:42，不要添加末尾冒号
+  # 全局键前缀；最终键形如 nest-admin:cache:users:v1:42，不要添加末尾冒号
   key-prefix: nest-admin:cache
+  # CLIENT LIST 中显示的连接名，便于排查连接来源；最长 128 个字符
+  connection-name: nest-admin-cache
   # 首次建立连接的超时，单位毫秒，必须为正整数
   connect-timeout: 2000
   # 单条命令的超时，单位毫秒，必须为正整数
   command-timeout: 1000
   # 每条待执行命令的最大重试次数，非负整数；故障期间不接受离线排队
   max-retries-per-request: 0
-  # 运行期重连的线性退避基数，1..30000 毫秒，间隔最多 30000 毫秒
+  # 运行期重连的指数退避基数，1..30000 毫秒
   retry-delay: 1000
+  # 运行期重连的最大退避间隔，1..60000 毫秒，且必须不小于 retry-delay
+  retry-max-delay: 30000
+  # TCP keep-alive 空闲探测间隔，单位毫秒；0 表示关闭
+  keep-alive: 30000
+  # 地址解析族：0 自动、4 IPv4、6 IPv6
+  family: 0
+  # 单个缓存值序列化后的最大字节数，1..16777216；防止误缓存大对象
+  max-value-bytes: 1048576
   # 启用 TLS 时校验服务器证书；私有 CA 使用 Node 的 NODE_EXTRA_CA_CERTS
   tls-enabled: false
+  # TLS 是否校验证书链与主机名；仅本地自签名调试时可关闭，生产必须为 true
+  tls-reject-unauthorized: true
 
 database:
   # 且启动时不会报配置错误（结构是合法的），请务必确认本地文件已建好。

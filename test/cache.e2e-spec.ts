@@ -1,7 +1,7 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
-import { CacheService } from '@app/cache';
+import { CacheService, RedisClient } from '@app/cache';
 import { createFastifyAdapter } from '@app/common';
 import { IPV6_HOST_BRACKETS_PATTERN } from '@app/common/constants/regex.js';
 import { loggerConfig, redisConfig } from '@app/config';
@@ -9,7 +9,6 @@ import { Test } from '@nestjs/testing';
 import { Redis } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { AppModule } from '../apps/gateway/src/app.module.js';
-import { RedisConnection } from '../libs/cache/src/redis.connection.js';
 import { loggerDomain } from '../libs/config/src/domains/logger.domain.js';
 import { redisDomain } from '../libs/config/src/domains/redis.domain.js';
 
@@ -82,10 +81,11 @@ describe('统一 Redis 配置', () => {
     const app = await createApp(redisDomain.parse({ enabled: false }, context));
     try {
       await app.init();
-      expect(app.get(RedisConnection).client).toBeUndefined();
+      expect(app.get(RedisClient).client).toBeUndefined();
       const cache = app.get(CacheService);
       await cache.set('disabled', 'value');
       expect(await cache.get('disabled')).toBeUndefined();
+      expect(await cache.health()).toMatchObject({ status: 'disabled' });
     } finally {
       await app.close();
     }
@@ -118,17 +118,43 @@ describe.skipIf(!testUrl)('独立 Redis + 实际网关模块 (e2e)', () => {
     observer?.disconnect();
   });
 
-  it('网关模块初始化，并在 Redis 中完成 JSON 写入、读取、失效', async () => {
+  it('网关模块初始化，并在 Redis 中完成版本化 JSON 写入、读取、失效', async () => {
     const key = 'users:v1:42';
     await cache.set(key, { id: 42, roles: ['reader'] });
     expect(await cache.get(key)).toEqual({ id: 42, roles: ['reader'] });
-    expect(await observer.get(`${namespace}:${key}`)).toContain('"id":42');
+
+    const raw = await observer.get(`${namespace}:${key}`);
+    expect(raw).toMatch(/^v1:/);
+    expect(raw).toContain('"id":42');
+
     const ttl = await observer.pttl(`${namespace}:${key}`);
     expect(ttl).toBeGreaterThan(0);
     expect(ttl).toBeLessThanOrEqual(5000);
+
     await cache.del(key);
     expect(await cache.get(key)).toBeUndefined();
     expect(await observer.exists(`${namespace}:${key}`)).toBe(0);
+  });
+
+  it('JSON 原始类型不会被当成未命中或错误值', async () => {
+    await cache.set('primitives:null', null);
+    await cache.set('primitives:false', false);
+    await cache.set('primitives:zero', 0);
+    await cache.set('primitives:empty', '');
+    await cache.set('primitives:nested', [null, false, 0, '', { ok: true }]);
+
+    expect(await cache.get('primitives:null')).toBeNull();
+    expect(await cache.get('primitives:false')).toBe(false);
+    expect(await cache.get('primitives:zero')).toBe(0);
+    expect(await cache.get('primitives:empty')).toBe('');
+    expect(await cache.get('primitives:nested')).toEqual([null, false, 0, '', { ok: true }]);
+    await cache.delMany([
+      'primitives:null',
+      'primitives:false',
+      'primitives:zero',
+      'primitives:empty',
+      'primitives:nested',
+    ]);
   });
 
   it('自定义 TTL 由 Redis 真正过期，使用有界轮询验证', async () => {
@@ -151,8 +177,18 @@ describe.skipIf(!testUrl)('独立 Redis + 实际网关模块 (e2e)', () => {
     await cache.del('wrap');
   });
 
+  it('健康检查与进程内指标反映真实 Redis 状态', async () => {
+    cache.resetMetrics();
+    await cache.set('metrics', 'value');
+    expect(await cache.get('metrics')).toBe('value');
+    expect(await cache.get('metrics-missing')).toBeUndefined();
+    expect(cache.getMetrics()).toMatchObject({ sets: 1, hits: 1, misses: 1 });
+    expect(await cache.health()).toMatchObject({ status: 'up' });
+    await cache.del('metrics');
+  });
+
   it('真实服务端命令错误：读为未命中，set/del 报错，连接恢复后可继续读写', async () => {
-    const client = app.get(RedisConnection).client!;
+    const client = app.get(RedisClient).client!;
     // 仅切换当前测试连接为只读权限：不会停止或更改 Redis 全局配置。
     const user = `cache_test_${randomUUID().replaceAll('-', '')}`;
     await observer.acl(
@@ -184,7 +220,7 @@ describe.skipIf(!testUrl)('独立 Redis + 实际网关模块 (e2e)', () => {
   });
 
   it('实际 socket 断开后拒绝离线写入，客户端自动重连并恢复', async () => {
-    const client = app.get(RedisConnection).client!;
+    const client = app.get(RedisClient).client!;
     const closed = new Promise<void>((resolve) => client.once('close', resolve));
     const id = await client.client('ID');
     await observer.client('KILL', 'ID', String(id));
@@ -203,7 +239,7 @@ describe.skipIf(!testUrl)('独立 Redis + 实际网关模块 (e2e)', () => {
   });
 
   it('关闭应用释放真实 socket 且移除自有监听器', async () => {
-    const client = app.get(RedisConnection).client!;
+    const client = app.get(RedisClient).client!;
     await app.close();
     await vi.waitFor(() => {
       expect(client.status).toBe('end');
@@ -211,6 +247,8 @@ describe.skipIf(!testUrl)('独立 Redis + 实际网关模块 (e2e)', () => {
     expect(client.listenerCount('ready')).toBe(0);
     expect(client.listenerCount('error')).toBe(0);
     expect(client.listenerCount('close')).toBe(0);
+    expect(client.listenerCount('reconnecting')).toBe(0);
+    expect(client.listenerCount('end')).toBe(0);
   });
 });
 
@@ -231,7 +269,7 @@ describe('Redis 启动失败 (e2e，无需 Redis)', () => {
     try {
       await expect(app.init()).rejects.toThrow('Redis 连接失败');
       await vi.waitFor(() => {
-        expect(app.get(RedisConnection).client!.status).toBe('end');
+        expect(app.get(RedisClient).client!.status).toBe('end');
       });
     } finally {
       await app.close();

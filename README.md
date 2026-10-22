@@ -194,7 +194,7 @@ create(@Body() body: CreateUserDto) {
 
 ## Redis 缓存
 
-`@app/cache` 已接入网关，默认关闭缓存，不要求本机运行 Redis。开关、默认 TTL 和连接选项统一放在 `redis` 下，配置沿用现有分层 YAML。在 `config/development.local.yaml` 中覆盖以下配置，确保 Redis 已运行，再执行 `pnpm start:dev`：
+`@app/cache` 已接入网关，默认关闭缓存，不要求本机运行 Redis。模块只依赖 `ioredis`，不使用 Keyv、cache-manager 或 `@nestjs/cache-manager`。开关、默认 TTL 和连接选项统一放在 `redis` 下，配置沿用现有分层 YAML。在 `config/development.local.yaml` 中覆盖以下配置，确保 Redis 已运行，再执行 `pnpm start:dev`：
 
 ```yaml
 redis:
@@ -204,9 +204,17 @@ redis:
   port: 6379
 ```
 
-其余连接选项见 `config/default.yaml`。已有本地配置需将原 `cache` 下的 `enabled`、`ttl` 移到 `redis` 下。生产凭据通过不入库的 `config/production.local.yaml` 挂载。
+其余连接、重连、TLS、TTL 抖动和值大小选项见 `config/default.yaml`。已有本地配置需将原 `cache` 下的 `enabled`、`ttl` 移到 `redis` 下。生产凭据通过不入库的 `config/production.local.yaml` 挂载。
 
-业务模块显式导入 `CacheModule`，注入 `CacheService` 使用 `get/set/del/wrap`。TTL 统一为正整数毫秒，默认 60000，禁止 0/永久缓存。启用时连接失败阻止启动；运行期读取失败按未命中处理，写入、删除以及 wrap 的写入失败会抛出错误。
+`CacheModule` 已标记为全局模块，业务模块可直接注入 `CacheService` 使用 `get/getMany/set/del/delMany/wrap`。TTL 统一为正整数毫秒，默认 60000，禁止 0/永久缓存。启用时连接失败阻止启动；运行期读取失败按未命中处理，写入、删除以及 wrap 的写入失败会抛出稳定错误。值使用版本化 JSON 编码，仅接受 JSON 安全的普通数据；旧 Keyv 条目会按未命中处理并在 TTL 后自然淘汰。
+
+```ts
+const user = await this.cache.wrap(`users:v1:${id}`, () => this.repo.findById(id), 30_000);
+const health = await this.cache.health(); // up / down / disabled
+const metrics = this.cache.getMetrics();
+```
+
+完整分层、配置表、失败语义、并发约定和生产接入清单见 [Cache 模块说明](libs/cache/README.md)；业务接入示例与 API 速查见 [Cache 使用文档](libs/cache/USAGE.md)。
 
 ```sh
 # REDIS_TEST_URL 指向本机独立测试 Redis 后运行
