@@ -64,6 +64,15 @@ B 侧 `prisma/models/*.prisma` 基本是 A 侧 `sys_*.sql` 的直译：
 
 > 注意 B 侧部门 `ancestors` 的语义变化：RuoYi 是"祖级列表不含自身"，nest 是"含自身的完整路径"。迁移数据时必须重算，不能直接拷贝。
 
+角色表另有两个树联动开关，已与 Java 对齐（`Boolean @default(true)`）：
+
+| 字段 | 作用 |
+| --- | --- |
+| `menu_check_strictly` | 角色菜单回显是否剔除父节点 |
+| `dept_check_strictly` | 角色部门回显是否剔除父节点 |
+
+它们**不参与任何权限计算**，只影响角色编辑页的 `checkedKeys`，详见 8.1。
+
 ---
 
 ## 3. 认证与权限载体：两边都是登录快照
@@ -466,6 +475,38 @@ dataScope String @default("5") @map("data_scope") @db.Char(1)
 | 缓存头 | 无特殊处理 | `Cache-Control: no-store` |
 
 B 侧的"只返回根可达节点"是一个细节上的正确性改进：RuoYi 如果数据里出现孤儿子菜单（父节点被删），可能出现菜单丢失但权限仍生效的诡异状态。
+
+### 8.1 角色编辑页回显（树联动开关）
+
+`sys_role` 上的两个布尔字段已补齐，默认值都是 `true`：
+
+| 字段 | 影响 |
+| --- | --- |
+| `menu_check_strictly` | `GET /system/roles/:id/menu-tree` 返回的 `checkedKeys` 是否剔除父节点 |
+| `dept_check_strictly` | `GET /system/roles/:id/dept-tree` 返回的 `checkedKeys` 是否剔除父节点 |
+
+对应 Java 的 `SysMenuMapper.selectMenuListByRoleId` / `SysDeptMapper.selectDeptListByRoleId`：
+
+```java
+if (menuCheckStrictly) {
+    wrapper.notInSql(SysMenu::getMenuId, buildParentMenuByRoleSql(roleId));
+}
+```
+
+nest 的实现是查出已选 ID 后，再查这些 ID 的 `parentId` 集合，把"作为其他已选节点父节点"的 ID 过滤掉（`RoleService.dropParentMenus` / `dropParentDepts`）。
+
+**为什么需要剔除**：前端树在非联动模式（`check-strictly`）下，`checkedKeys` 里只要出现父节点 ID 就会渲染成实心全选，即使它只有部分子节点被选。剔除后父节点由子节点状态推导为半选，视觉才正确。
+
+**对权限零影响**：功能权限走 `Menu.perms` 聚合，数据权限走 `DataScope`，都不读这两个字段。它们纯粹是前端树控件 UI 状态的持久化。
+
+两个接口：
+
+| 接口 | 返回 | 权限 |
+| --- | --- | --- |
+| `GET /system/roles/:id/menu-tree` | `{ checkedKeys, menus }` | `system:role:query` |
+| `GET /system/roles/:id/dept-tree` | `{ checkedKeys, depts }` | `system:role:query` |
+
+与 Java 的差异只有权限码：Java 分别用 `system:menu:query` 和 `system:role:list`，nest 统一为 `system:role:query`（两个接口都是"查看某个角色的配置"，且都挂在角色资源下）。
 
 ---
 

@@ -5,6 +5,7 @@ import { Exclude, Expose, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsIn,
   IsInt,
   IsOptional,
@@ -15,6 +16,8 @@ import {
   Min,
   ValidateIf,
 } from 'class-validator';
+import { DeptTreeDto } from '../../dept/dto/dept.dto.js';
+import { MenuTreeDto } from '../../menu/dto/menu.dto.js';
 
 export class CreateRoleDto {
   /** 角色名称。 */
@@ -40,6 +43,21 @@ export class CreateRoleDto {
   @ValidateIf((_object, value) => value !== undefined)
   @IsIn(['0', '1'])
   status?: string;
+
+  /**
+   * 菜单树选择项是否关联显示，缺省 true。
+   *
+   * 只影响角色菜单回显（`GET /system/roles/:id/menu-tree`）：为 true 时剔除父节点，
+   * 让前端把部分勾选的父节点渲染成半选。不参与权限计算。
+   */
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsBoolean()
+  menuCheckStrictly?: boolean;
+
+  /** 部门树选择项是否关联显示，缺省 true；只影响角色部门回显，不参与数据权限计算。 */
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsBoolean()
+  deptCheckStrictly?: boolean;
 
   /** 备注；null 清空。 */
   @IsOptional()
@@ -122,6 +140,12 @@ export class RoleResponseDto {
   dataScope!: string;
 
   @Expose()
+  menuCheckStrictly!: boolean;
+
+  @Expose()
+  deptCheckStrictly!: boolean;
+
+  @Expose()
   @Type(() => String)
   menuIds!: string[];
 
@@ -150,4 +174,30 @@ export class RolePageDto {
   @Expose()
   @Type(() => PageMetaDto)
   meta!: PageMetaDto;
+}
+
+/** 角色菜单回显：已选 ID + 完整菜单树。 */
+@Exclude()
+export class RoleMenuTreeDto {
+  /** 角色已关联的菜单 ID；menuCheckStrictly 为 true 时只含末级节点，父节点由前端推导为半选。 */
+  @Expose()
+  @Type(() => String)
+  checkedKeys!: string[];
+
+  @Expose()
+  @Type(() => MenuTreeDto)
+  menus!: MenuTreeDto[];
+}
+
+/** 角色部门回显：已选 ID + 完整部门树。 */
+@Exclude()
+export class RoleDeptTreeDto {
+  /** 角色已关联的部门 ID；deptCheckStrictly 为 true 时只含末级节点。 */
+  @Expose()
+  @Type(() => String)
+  checkedKeys!: string[];
+
+  @Expose()
+  @Type(() => DeptTreeDto)
+  depts!: DeptTreeDto[];
 }

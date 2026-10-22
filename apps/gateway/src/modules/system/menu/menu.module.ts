@@ -7,5 +7,6 @@ import { MenuService } from './menu.service.js';
   imports: [AuthModule],
   controllers: [MenuController],
   providers: [MenuService],
+  exports: [MenuService],
 })
 export class MenuModule {}

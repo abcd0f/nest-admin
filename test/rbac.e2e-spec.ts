@@ -192,9 +192,9 @@ describe('实际网关 RBAC 接入 (e2e)', () => {
     token = await login();
   });
 
-  it('健康检查公开，示例接口默认受认证保护，错误沿用统一响应', async () => {
+  it('健康检查公开，管理接口默认受认证保护，错误沿用统一响应', async () => {
     expect((await app.inject({ url: '/api' })).statusCode).toBe(200);
-    const response = await app.inject({ url: '/api/example' });
+    const response = await app.inject({ url: '/api/system/users' });
     expect(response.statusCode).toBe(401);
     expect(response.json()).toEqual({ code: 401, data: null, message: '未认证' });
   });
@@ -204,6 +204,8 @@ describe('实际网关 RBAC 接入 (e2e)', () => {
     ['GET', '/api/system/roles'],
     ['GET', '/api/system/menus'],
     ['GET', '/api/system/depts'],
+    ['GET', '/api/system/roles/1/menu-tree'],
+    ['GET', '/api/system/roles/1/dept-tree'],
     ['PATCH', '/api/system/users/1/roles'],
     ['PATCH', '/api/system/roles/1/menus'],
     ['PATCH', '/api/system/roles/1/data-scope'],

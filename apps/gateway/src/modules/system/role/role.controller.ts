@@ -7,6 +7,8 @@ import {
   AssignRoleMenusDto,
   CreateRoleDto,
   RoleDataScopeDto,
+  RoleDeptTreeDto,
+  RoleMenuTreeDto,
   RolePageDto,
   RoleQueryDto,
   RoleResponseDto,
@@ -32,6 +34,20 @@ export class RoleController {
   @Permission('system:role:query')
   findOne(@Param('id') id: string): Promise<RoleResponseDto> {
     return this.service.findOne(id);
+  }
+
+  /** 角色菜单回显：已选 ID 按 menuCheckStrictly 裁剪父节点，另返回完整菜单树。 */
+  @Get(':id/menu-tree')
+  @Permission('system:role:query')
+  menuTree(@Param('id') id: string): Promise<RoleMenuTreeDto> {
+    return this.service.menuTreeSelect(id);
+  }
+
+  /** 角色部门回显：已选 ID 按 deptCheckStrictly 裁剪父节点，另返回完整部门树。 */
+  @Get(':id/dept-tree')
+  @Permission('system:role:query')
+  deptTree(@Param('id') id: string): Promise<RoleDeptTreeDto> {
+    return this.service.deptTreeSelect(id);
   }
 
   /** 创建角色，初始数据范围为本人，初始无菜单权限。 */

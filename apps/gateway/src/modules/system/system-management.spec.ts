@@ -24,6 +24,9 @@ const actor: AuthenticatedUser = {
 };
 /** 会话撤销桩：影响权限的写操作提交后会按用户踢人。 */
 const auth = { revokeUserSessions: vi.fn().mockResolvedValue(1) };
+/** 角色回显要返回完整菜单树/部门树，这里只关心被调用，不关心树内容。 */
+const menuService = { findAll: vi.fn().mockResolvedValue([]) };
+const deptService = { findAll: vi.fn().mockResolvedValue([]) };
 const date = new Date('2026-01-02T03:04:05.000Z');
 
 function transaction(tx: object) {
@@ -57,6 +60,8 @@ function roleRow(extra: Record<string, unknown> = {}) {
     roleKey: 'operator',
     orderNum: 0,
     dataScope: '5',
+    menuCheckStrictly: true,
+    deptCheckStrictly: true,
     status: '0',
     remark: null,
     createTime: date,
@@ -174,7 +179,7 @@ describe('分页与响应 DTO', () => {
       },
       roleDept: { findMany: vi.fn().mockResolvedValue([{ roleId: 3n, deptId: 6n }]) },
     };
-    const page = await new RoleService(prisma as never, auth as never).findAll({});
+    const page = await new RoleService(prisma as never, auth as never, menuService as never, deptService as never).findAll({});
     expect(prisma.role.findMany.mock.lastCall?.[0]).toMatchObject({
       skip: 0,
       take: 20,
@@ -234,7 +239,7 @@ describe('直接参数与字段校验', () => {
       };
       const services = [
         new UserService(prisma as never, {} as never, auth as never),
-        new RoleService(prisma as never, auth as never),
+        new RoleService(prisma as never, auth as never, menuService as never, deptService as never),
         new MenuService(prisma as never, auth as never),
         new DeptService(prisma as never),
       ];
@@ -256,7 +261,7 @@ describe('直接参数与字段校验', () => {
     };
     for (const service of [
       new UserService(prisma as never, {} as never, auth as never),
-      new RoleService(prisma as never, auth as never),
+      new RoleService(prisma as never, auth as never, menuService as never, deptService as never),
       new MenuService(prisma as never, auth as never),
       new DeptService(prisma as never),
     ]) {
@@ -300,7 +305,7 @@ describe('权限变更后的会话失效', () => {
       userRole: { findMany: vi.fn().mockResolvedValue([{ userId: 2n }, { userId: 3n }]) },
     };
     auth.revokeUserSessions.mockClear();
-    const service = new RoleService(prisma as never, auth as never);
+    const service = new RoleService(prisma as never, auth as never, menuService as never, deptService as never);
     await expect(service.assignMenus('2', { menuIds: [] }, actor)).resolves.toMatchObject({
       roleId: '2',
     });
@@ -491,7 +496,7 @@ describe('角色和菜单管理服务', () => {
       roleDept: { deleteMany: vi.fn(), createMany: vi.fn() },
     };
     const prisma = { $transaction: transaction(tx) };
-    const service = new RoleService(prisma as never, auth as never);
+    const service = new RoleService(prisma as never, auth as never, menuService as never, deptService as never);
     expect(
       (await service.dataScope('2', { dataScope: '2', deptIds: ['5'] }, actor)).deptIds,
     ).toEqual(['5']);
@@ -513,7 +518,12 @@ describe('角色和菜单管理服务', () => {
       menu: { findMany: vi.fn().mockResolvedValue([{ menuId: 4n }]) },
       roleMenu: { deleteMany: vi.fn(), createMany: vi.fn() },
     };
-    const service = new RoleService({ $transaction: transaction(tx) } as never, auth as never);
+    const service = new RoleService(
+      { $transaction: transaction(tx) } as never,
+      auth as never,
+      menuService as never,
+      deptService as never,
+    );
     await expect(service.assignMenus('2', { menuIds: ['4', '5'] }, actor)).rejects.toMatchObject({
       status: 422,
     });
@@ -529,7 +539,7 @@ describe('角色和菜单管理服务', () => {
       },
     };
     const prisma = { $transaction: transaction(tx) };
-    const service = new RoleService(prisma as never, auth as never);
+    const service = new RoleService(prisma as never, auth as never, menuService as never, deptService as never);
     for (const roleKey of ['superadmin', 'admin']) {
       await expect(
         service.create({ roleName: 'reserved', roleKey } as never, actor),
@@ -543,6 +553,97 @@ describe('角色和菜单管理服务', () => {
       );
     }
     expect(tx.role.update).not.toHaveBeenCalled();
+  });
+
+  it('角色回显按联动开关裁剪父节点：true 只留末级，false 返回全部已选', async () => {
+    const prisma = {
+      role: { findFirst: vi.fn().mockResolvedValue({ menuCheckStrictly: true, deptCheckStrictly: true }) },
+      roleMenu: {
+        findMany: vi.fn().mockResolvedValue([{ menuId: 1n }, { menuId: 2n }, { menuId: 3n }]),
+      },
+      roleDept: {
+        findMany: vi.fn().mockResolvedValue([{ deptId: 10n }, { deptId: 11n }]),
+      },
+      // 菜单 1 是 2、3 的父节点；部门 10 是 11 的父节点。
+      menu: { findMany: vi.fn().mockResolvedValue([{ parentId: 0n }, { parentId: 1n }, { parentId: 1n }]) },
+      dept: { findMany: vi.fn().mockResolvedValue([{ parentId: 0n }, { parentId: 10n }]) },
+    };
+    const service = new RoleService(
+      prisma as never,
+      auth as never,
+      menuService as never,
+      deptService as never,
+    );
+    expect(await service.menuTreeSelect('2')).toEqual({ checkedKeys: ['2', '3'], menus: [] });
+    expect(await service.deptTreeSelect('2')).toEqual({ checkedKeys: ['11'], depts: [] });
+
+    prisma.role.findFirst.mockResolvedValue({ menuCheckStrictly: false, deptCheckStrictly: false });
+    prisma.menu.findMany.mockClear();
+    prisma.dept.findMany.mockClear();
+    expect(await service.menuTreeSelect('2')).toEqual({ checkedKeys: ['1', '2', '3'], menus: [] });
+    expect(await service.deptTreeSelect('2')).toEqual({ checkedKeys: ['10', '11'], depts: [] });
+    // 不裁剪时不应再查父节点。
+    expect(prisma.menu.findMany).not.toHaveBeenCalled();
+    expect(prisma.dept.findMany).not.toHaveBeenCalled();
+  });
+
+  it('角色不存在时回显返回 404，空关联直接返回空数组', async () => {
+    const prisma = {
+      role: { findFirst: vi.fn().mockResolvedValue(null) },
+      roleMenu: { findMany: vi.fn() },
+      roleDept: { findMany: vi.fn() },
+      menu: { findMany: vi.fn() },
+      dept: { findMany: vi.fn() },
+    };
+    const service = new RoleService(
+      prisma as never,
+      auth as never,
+      menuService as never,
+      deptService as never,
+    );
+    await expect(service.menuTreeSelect('2')).rejects.toMatchObject({ status: 404 });
+    await expect(service.deptTreeSelect('2')).rejects.toMatchObject({ status: 404 });
+    expect(prisma.roleMenu.findMany).not.toHaveBeenCalled();
+
+    prisma.role.findFirst.mockResolvedValue({ menuCheckStrictly: true, deptCheckStrictly: true });
+    prisma.roleMenu.findMany.mockResolvedValue([]);
+    prisma.roleDept.findMany.mockResolvedValue([]);
+    expect(await service.menuTreeSelect('2')).toEqual({ checkedKeys: [], menus: [] });
+    expect(await service.deptTreeSelect('2')).toEqual({ checkedKeys: [], depts: [] });
+    expect(prisma.menu.findMany).not.toHaveBeenCalled();
+  });
+
+  it('创建与更新角色写入树联动开关，未传字段不覆盖已有值', async () => {
+    const tx = {
+      role: {
+        count: vi.fn().mockResolvedValue(0),
+        create: vi
+          .fn()
+          .mockResolvedValue(roleRow({ menuCheckStrictly: false, deptCheckStrictly: false })),
+        findFirst: vi.fn().mockResolvedValue({ roleId: 2n, roleKey: 'operator' }),
+        update: vi.fn().mockResolvedValue(roleRow()),
+      },
+    };
+    const prisma = { $transaction: transaction(tx) };
+    const service = new RoleService(
+      prisma as never,
+      auth as never,
+      menuService as never,
+      deptService as never,
+    );
+    await service.create(
+      { roleName: '审计', roleKey: 'auditor', menuCheckStrictly: false, deptCheckStrictly: false },
+      actor,
+    );
+    expect(tx.role.create.mock.lastCall?.[0].data).toMatchObject({
+      menuCheckStrictly: false,
+      deptCheckStrictly: false,
+    });
+    await service.update('2', { menuCheckStrictly: true }, actor);
+    expect(tx.role.update.mock.lastCall?.[0].data).toMatchObject({
+      menuCheckStrictly: true,
+      deptCheckStrictly: undefined,
+    });
   });
 
   it('菜单创建拒绝错误父类型；物理删除前保护子节点和角色关联', async () => {
