@@ -11,7 +11,7 @@
 | `libs/auth/src/session.store.ts`                       | 复用现有 `RedisService`，保存摘要、原子轮换、检测重放、撤销及严格失败语义；不创建第二个 Redis 客户端。                                                 |
 | `libs/auth/src/auth.guard.ts`                          | 读取 Bearer Token，清除未经验证的 `request.user`，完成认证后附加可信上下文。                                                                           |
 | `libs/permission/src/permission.guard.ts`              | 解析角色/权限要求，默认拒绝没有策略的已认证接口；注解内部支持 AND/OR、角色兜底，注解之间固定 AND。                                                     |
-| `libs/permission/src/permission.source.ts`             | `PermissionSource.getPermissions(userId)` 与 `getRoles(userId)` 是阶段 3 的查询接入点；当前默认源返回空权限和空角色。                                  |
+| `libs/permission/src/permission.source.ts`             | `PermissionSource.getAuthorization(userId)` 按当前数据库关系加载有效角色与权限；实现见阶段 3 说明。                                                    |
 | `apps/gateway/src/app.module.ts`                       | 直接导入 `AuthModule`、`PermissionModule`，在同一 providers 数组先后注册 `AuthGuard`、`PermissionGuard` 为全局守卫。没有独立的 AccessControlModule。   |
 | `libs/core/src/pipes/validation.pipe.ts`               | 以 `APP_PIPE` 注册全局 DTO 校验，返回既有 422 + `errors` 结构。                                                                                        |
 | `apps/gateway/src/modules/system/auth/dto/auth.dto.ts` | 登录/刷新入参，以及用户、令牌、登录、当前用户响应 DTO；后续 auth 业务模块直接复用。                                                                    |
@@ -40,7 +40,7 @@ providers: [
 | `@Permission('system:user:list')`                              | 必须精确匹配这一权限码。                                                                     |
 | `@Permission({ value: ['a', 'b'] })`                           | 默认 AND，必须同时有 a 和 b；也可显式设置 `mode: Mode.AND`。                                 |
 | `@Permission({ value: ['a', 'b'], mode: Mode.OR })`            | 有 a 或 b 即满足这一条注解。                                                                 |
-| `@Permission({ value: 'a', role: ['admin', 'operator'] })`   | 有 a 权限，或具有任一列出的角色；不绕过其他注解。                                            |
+| `@Permission({ value: 'a', role: ['admin', 'operator'] })`     | 有 a 权限，或具有任一列出的角色；不绕过其他注解。                                            |
 | `@Role('admin')`                                               | 必须拥有精确匹配的 admin 角色标识。                                                          |
 | `@Role({ value: ['admin', 'operator'], mode: Mode.OR })`       | 任一角色即可；Role 不指定 mode 时同样默认 AND。                                              |
 | `@RequirePermissions('system:user:list', 'system:user:query')` | 保留旧调用方式，相当于一条默认 AND 的 `Permission` 注解。                                    |
@@ -66,7 +66,7 @@ findAll() {
 }
 ```
 
-示例中的 `Authenticated`、`Permission`、`Role`、`Mode` 和兼容入口 `RequirePermissions` 来自 `@app/permission`，`CurrentUser` 和 `AuthenticatedUser` 来自 `@app/auth`。在阶段 3 实现实际权限源前，带功能权限或角色要求的路由不会获得授权。
+示例中的 `Authenticated`、`Permission`、`Role`、`Mode` 和兼容入口 `RequirePermissions` 来自 `@app/permission`，`CurrentUser` 和 `AuthenticatedUser` 来自 `@app/auth`。实际角色菜单查询和失效规则见[阶段 3 说明](./rbac-phase3-permission-loading.md)。
 
 ### Nest 装饰器组合示例
 
@@ -106,7 +106,7 @@ changeAndViewLogs() {}
 
 每条 `Permission` 的判断为 `(按 mode 判断 value) OR (具有任一 role)`，然后所有 `Permission`、`Role` 注解结果固定 AND。装饰器书写顺序不改变结果。`role` 不受 `mode` 影响，始终是任一角色兜底，且只作用于当前注解；即使某条注解通过 admin 兜底，其他条目也必须满足。单个权限或角色可用字符串，多值使用 `value` 数组；`role` 同样支持字符串或数组。
 
-空数组、空字符串、首尾空白、通配符和非法 mode 在装饰器创建时抛出配置错误；不做自动 trim 或通配符展开。角色使用阶段 3 查询返回的 `roleKey`，权限使用 `Menu.perms`，不把角色名当权限，不提供 admin 隐式超级权限。每次授权按需各查询一次权限/角色；叠加注解不会重复查询，查询异常不会转为空列表后放行。数据只来自可信权限源，不读取请求参数或 JWT 中的角色/权限。
+空数组、空字符串、首尾空白、通配符和非法 mode 在装饰器创建时抛出配置错误；不做自动 trim 或通配符展开。角色使用阶段 3 查询返回的 `roleKey`，权限使用 `Menu.perms`，不把角色名当权限，不提供 admin 隐式超级权限。每次授权一次加载角色/权限结果；叠加注解不会重复查询，查询异常不会转为空列表后放行。数据只来自可信权限源，不读取请求参数或 JWT 中的角色/权限。
 
 ## 3. 令牌和会话协议
 
@@ -150,7 +150,7 @@ pnpm exec vitest run --config vitest.config.e2e.ts test/auth-session.e2e-spec.ts
 
 未设置该变量时显式跳过这 3 项外部依赖测试。现有缓存集成测试的 `REDIS_TEST_URL` 规则保持不变。非数据库测试使用 Prisma mock；日志探针控制器只在测试中显式公开，以保留原日志测试目的。
 
-阶段 3 需实现并替换 `PermissionSource` 的默认空权限源、查询有效角色/菜单、聚合权限并提供当前用户的角色与权限数据；阶段 4 再将本阶段的认证服务和 DTO 接到登录/刷新/退出/当前用户控制器。数据范围解析仍在阶段 6，不在本阶段提前实现。
+阶段 3 已实现角色/菜单权限查询并通过 `PermissionService.getAuthorization(userId)` 提供给当前用户业务复用；阶段 4 再将认证服务和 DTO 接到登录/刷新/退出/当前用户控制器。数据范围解析仍在阶段 6，不在本阶段提前实现。
 
 ### 本阶段验证结果
 

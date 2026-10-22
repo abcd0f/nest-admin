@@ -58,15 +58,11 @@ function setup(
   permissions: string[],
   roles: string[],
 ) {
-  const getPermissions = vi.fn().mockResolvedValue(permissions);
-  const getRoles = vi.fn().mockResolvedValue(roles);
-  const guard = new PermissionGuard(
-    new Reflector(),
-    new PermissionService({ getPermissions, getRoles }),
-  );
+  const getAuthorization = vi.fn().mockResolvedValue({ permissions, roles });
+  const guard = new PermissionGuard(new Reflector(), new PermissionService({ getAuthorization }));
   const request = { user: { userId: '1' } };
   const context = new ExecutionContextHost([request], controller, controller.prototype[method]);
-  return { guard, context, request, getPermissions, getRoles };
+  return { guard, context, request, getAuthorization };
 }
 
 describe('权限与角色注解组合', () => {
@@ -110,7 +106,7 @@ describe('权限与角色注解组合', () => {
     for (const method of ['either', 'profile'] as const) {
       const value = setup(RestrictedController, method, ['a'], []);
       await expect(value.guard.canActivate(value.context)).rejects.toThrow(ForbiddenException);
-      value.getRoles.mockResolvedValue(['admin']);
+      value.getAuthorization.mockResolvedValue({ permissions: ['a'], roles: ['admin'] });
       expect(await value.guard.canActivate(value.context)).toBe(true);
     }
     // 派生类的声明不能污染基类。
@@ -121,13 +117,12 @@ describe('权限与角色注解组合', () => {
   it('重复注解只查询一次权限/角色，使用可信的用户 ID', async () => {
     const value = setup(ProbeController, 'stackedFallback', ['c'], ['admin']);
     expect(await value.guard.canActivate(value.context)).toBe(true);
-    expect(value.getPermissions).toHaveBeenCalledExactlyOnceWith('1');
-    expect(value.getRoles).toHaveBeenCalledExactlyOnceWith('1');
+    expect(value.getAuthorization).toHaveBeenCalledExactlyOnceWith('1');
   });
 
   it('角色查询失败不能当成空角色或放行', async () => {
     const value = setup(ProbeController, 'fallback', ['a', 'b'], []);
-    value.getRoles.mockRejectedValue(new Error('role source unavailable'));
+    value.getAuthorization.mockRejectedValue(new Error('role source unavailable'));
     await expect(value.guard.canActivate(value.context)).rejects.toThrow('role source unavailable');
   });
 
@@ -135,8 +130,7 @@ describe('权限与角色注解组合', () => {
     const value = setup(ProbeController, 'either', [], []);
     Reflect.deleteProperty(value.request, 'user');
     await expect(value.guard.canActivate(value.context)).rejects.toThrow(UnauthorizedException);
-    expect(value.getPermissions).not.toHaveBeenCalled();
-    expect(value.getRoles).not.toHaveBeenCalled();
+    expect(value.getAuthorization).not.toHaveBeenCalled();
   });
 
   it('启动时拒绝空值、通配符和非法 mode，不静默降级', () => {

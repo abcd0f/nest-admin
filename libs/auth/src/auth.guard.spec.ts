@@ -46,18 +46,20 @@ function setup(method: keyof ProbeController, header?: string, user?: Authentica
     ProbeController.prototype[method],
   );
   const authenticate = vi.fn().mockResolvedValue(verifiedUser);
-  const getPermissions = vi.fn().mockResolvedValue(['system:user:list', 'class:resource:read']);
-  const getRoles = vi.fn().mockResolvedValue([]);
+  const getAuthorization = vi.fn().mockResolvedValue({
+    permissions: ['system:user:list', 'class:resource:read'],
+    roles: [],
+  });
   const authentication = new AuthGuard(new Reflector(), { authenticate } as never);
   const authorization = new PermissionGuard(
     new Reflector(),
-    new PermissionService({ getPermissions, getRoles }),
+    new PermissionService({ getAuthorization }),
   );
   return {
     request,
     context,
     authenticate,
-    getPermissions,
+    getAuthorization,
     // 单元测试串行调用两个守卫；实际 AppModule 注册顺序由 HTTP e2e 验证。
     guard: {
       async canActivate(context: ExecutionContextHost) {
@@ -73,7 +75,7 @@ describe('认证与权限守卫', () => {
     expect(await value.guard.canActivate(value.context)).toBe(true);
     expect(value.request.user).toBeUndefined();
     expect(value.authenticate).not.toHaveBeenCalled();
-    expect(value.getPermissions).not.toHaveBeenCalled();
+    expect(value.getAuthorization).not.toHaveBeenCalled();
   });
 
   it.each([undefined, '', 'Basic abc', 'Bearer', 'Bearer a b'])(
@@ -81,7 +83,7 @@ describe('认证与权限守卫', () => {
     async (header) => {
       const value = setup('list', header);
       await expect(value.guard.canActivate(value.context)).rejects.toThrow(UnauthorizedException);
-      expect(value.getPermissions).not.toHaveBeenCalled();
+      expect(value.getAuthorization).not.toHaveBeenCalled();
     },
   );
 
@@ -89,9 +91,9 @@ describe('认证与权限守卫', () => {
     const value = setup('list', 'Bearer token');
     expect(await value.guard.canActivate(value.context)).toBe(true);
     expect(value.authenticate).toHaveBeenCalledExactlyOnceWith('token');
-    expect(value.getPermissions).toHaveBeenCalledExactlyOnceWith('1');
+    expect(value.getAuthorization).toHaveBeenCalledExactlyOnceWith('1');
     expect(value.authenticate.mock.invocationCallOrder[0]).toBeLessThan(
-      value.getPermissions.mock.invocationCallOrder[0],
+      value.getAuthorization.mock.invocationCallOrder[0],
     );
   });
 
@@ -99,16 +101,16 @@ describe('认证与权限守卫', () => {
     const value = setup('list', 'Bearer token');
     value.authenticate.mockRejectedValueOnce(new UnauthorizedException());
     await expect(value.guard.canActivate(value.context)).rejects.toThrow(UnauthorizedException);
-    expect(value.getPermissions).not.toHaveBeenCalled();
-    value.getPermissions.mockResolvedValueOnce([]);
+    expect(value.getAuthorization).not.toHaveBeenCalled();
+    value.getAuthorization.mockResolvedValueOnce({ permissions: [], roles: [] });
     await expect(value.guard.canActivate(value.context)).rejects.toThrow(ForbiddenException);
   });
 
   it('仅登录策略不能清除类权限；无策略的路由拒绝访问', async () => {
     const value = setup('profile', 'Bearer token');
     expect(await value.guard.canActivate(value.context)).toBe(true);
-    expect(value.getPermissions).toHaveBeenCalledExactlyOnceWith('1');
-    value.getPermissions.mockResolvedValueOnce([]);
+    expect(value.getAuthorization).toHaveBeenCalledExactlyOnceWith('1');
+    value.getAuthorization.mockResolvedValueOnce({ permissions: [], roles: [] });
     await expect(value.guard.canActivate(value.context)).rejects.toThrow(ForbiddenException);
     class UnmarkedController {
       update() {}

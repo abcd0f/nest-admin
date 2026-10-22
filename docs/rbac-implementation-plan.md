@@ -13,7 +13,7 @@
 - `prisma/models/menu.prisma`：`Menu` 可表示目录（`M`）、菜单（`C`）和按钮（`F`），`perms` 用于操作权限标识。
 - `prisma/models/dept.prisma`：部门具有 `parentId` 与含自身的 `ancestors` 路径，可供部门树及下级范围计算使用。
 - `prisma/models/relations.prisma`：已有用户-角色、角色-菜单、角色-部门关联表，复合主键和级联删除均已定义。
-- `libs/auth` 与 `libs/permission` 已在阶段 2 接入 JWT/会话、认证守卫、权限策略与守卫；实际角色菜单查询留给阶段 3。
+- `libs/auth` 与 `libs/permission` 已接入 JWT/会话、认证守卫及角色/菜单权限查询；当前角色权限加载不缓存。
 - `apps/gateway/src/modules/system/system.module.ts` 当前全局导入 `ExampleModule`。示例展示 controller/service/module/dto 的目录和 ESM `.js` 导入约定。
 - `DatabaseModule` 全局提供 `PrismaService`；`CacheModule` 全局提供 Redis 能力；`CryptoModule` 和 `CoreModule` 注册全局守卫、异常过滤器与响应拦截器。
 - 阶段 1 已新增唯一 JWT 直接依赖 `@nestjs/jwt`；`libs/crypto` 提供 Argon2id 密码哈希服务。
@@ -123,9 +123,9 @@
 
 **验收：** 守卫能在隔离测试中稳定区分公开、未认证、已认证及无权访问；测试不依赖真实数据库或 Redis。
 
-已在 `AppModule` 直接导入认证/权限模块并按序注册两个全局守卫，无单独的 AccessControlModule；已交付认证/权限/角色装饰器、JWT 与 Redis 会话服务、认证 DTO 和全局 422 校验。隔离测试使用 mock；另提供真实 Redis 原子性测试和实际网关 HTTP 测试。接口、会话协议、测试方式及阶段边界见 [阶段 2 说明](./rbac-phase2-auth-foundation.md)。当前默认权限源返回空权限和空角色，阶段 3 再替换为实际 Prisma 查询实现。
+已在 `AppModule` 直接导入认证/权限模块并按序注册两个全局守卫，无单独的 AccessControlModule；已交付认证/权限/角色装饰器、JWT 与 Redis 会话服务、认证 DTO 和全局 422 校验。接口、会话协议、测试方式及阶段边界见 [阶段 2 说明](./rbac-phase2-auth-foundation.md)。
 
-### 阶段 3：实现用户权限加载和功能授权
+### 阶段 3：实现用户权限加载和功能授权（已完成）
 
 1. 通过 `PrismaService` 查询当前有效用户和关联角色，不信任客户端传入的 userId、roleId 或权限列表。
 2. 解析角色关联菜单，忽略失效角色/菜单，聚合 `perms`；权限查询可用于守卫检查和当前用户信息接口。
@@ -134,6 +134,8 @@
 5. 测试多角色并集、无角色、失效角色、菜单禁用、菜单/按钮权限码匹配和管理员特殊策略（若已确认）。
 
 **验收：** 请求只有在其用户当前有效角色拥有对应 `Menu.perms` 时才可通过；前端返回的权限不参与服务端决策。
+
+阶段 3 已通过 `PrismaPermissionSource` 按可信用户 ID 查询有效角色与菜单权限，每次授权实时加载且失败关闭。无效用户返回 401、查询故障返回 503；停用/删除角色和停用菜单会即时移除权限。不使用隐式超级管理员，全部边界与验证见 [阶段 3 权限加载说明](./rbac-phase3-permission-loading.md)。登录及当前用户业务 HTTP API 留在阶段 4。
 
 ### 阶段 4：实现认证业务接口
 

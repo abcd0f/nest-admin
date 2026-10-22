@@ -8,17 +8,10 @@ import { RedisClient } from '@app/cache';
 import { createFastifyAdapter } from '@app/common';
 import { loggerConfig } from '@app/config';
 import { PrismaService } from '@app/database';
-import {
-  Authenticated,
-  Mode,
-  Permission,
-  PermissionSource,
-  RequirePermissions,
-  Role,
-} from '@app/permission';
+import { Authenticated, Mode, Permission, RequirePermissions, Role } from '@app/permission';
 import { Body, Controller, Get, Inject, Post, UnauthorizedException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppModule } from '../apps/gateway/src/app.module.js';
 import { LoginDto } from '../apps/gateway/src/modules/system/auth/dto/auth.dto.js';
 import { SessionStore } from '../libs/auth/src/session.store.js';
@@ -95,12 +88,35 @@ class ProbeController {
 // Vitest 不运行 Nest 的 emitDecoratorMetadata 编译链，显式保留 DTO metatype。
 Reflect.defineMetadata('design:paramtypes', [LoginDto], ProbeController.prototype, 'validated');
 
+function assignment(roleKey = 'operator', permissions = ['system:user:list']) {
+  return {
+    role: {
+      roleKey,
+      status: '0',
+      delFlag: '0',
+      menus: permissions.map((perms) => ({ menu: { perms, status: '0', menuType: 'F' } })),
+    },
+  };
+}
+
 describe('实际网关 RBAC 接入 (e2e)', () => {
   let app: NestFastifyApplication;
   let token: string;
   let active = true;
-  const getPermissions = vi.fn().mockResolvedValue(['system:user:list']);
-  const getRoles = vi.fn().mockResolvedValue([]);
+  let roles = [assignment()];
+  let authorizationUnavailable = false;
+  const findUnique = vi.fn(async ({ select }: { select: { roles?: unknown } }) => {
+    if (authorizationUnavailable && select.roles) throw new Error('private database detail');
+    return {
+      userId: 1n,
+      userName: 'alice',
+      nickName: 'Alice',
+      deptId: null,
+      status: active ? '0' : '1',
+      delFlag: '0',
+      roles,
+    };
+  });
   const sessions = new Map<string, AuthSession>();
 
   beforeAll(async () => {
@@ -109,18 +125,7 @@ describe('实际网关 RBAC 接入 (e2e)', () => {
       controllers: [ProbeController],
     })
       .overrideProvider(PrismaService)
-      .useValue({
-        user: {
-          findUnique: vi.fn(async () => ({
-            userId: 1n,
-            userName: 'alice',
-            nickName: 'Alice',
-            deptId: null,
-            status: active ? '0' : '1',
-            delFlag: '0',
-          })),
-        },
-      })
+      .useValue({ user: { findUnique } })
       .overrideProvider(RedisClient)
       .useValue(new RedisClient(redisDomain.parse({ enabled: false }, { environment: 'test' })))
       .overrideProvider(SessionStore)
@@ -137,8 +142,6 @@ describe('实际网关 RBAC 接入 (e2e)', () => {
           sessions.delete(sid);
         },
       })
-      .overrideProvider(PermissionSource)
-      .useValue({ getPermissions, getRoles })
       .overrideProvider(loggerConfig.KEY)
       .useValue(
         loggerDomain.parse(
@@ -158,6 +161,12 @@ describe('实际网关 RBAC 接入 (e2e)', () => {
 
   afterAll(async () => {
     await app?.close();
+  });
+
+  beforeEach(() => {
+    roles = [assignment()];
+    active = true;
+    authorizationUnavailable = false;
   });
 
   it('健康检查公开，示例接口默认受认证保护，错误沿用统一响应', async () => {
@@ -188,7 +197,7 @@ describe('实际网关 RBAC 接入 (e2e)', () => {
   it('权限允许/拒绝，无策略管理操作拒绝', async () => {
     const request = { url: '/api/rbac-probe/list', headers: { authorization: `Bearer ${token}` } };
     expect((await app.inject(request)).statusCode).toBe(200);
-    getPermissions.mockResolvedValueOnce([]);
+    roles = [];
     const rejected = await app.inject(request);
     expect(rejected.statusCode).toBe(403);
     expect(rejected.json()).toMatchObject({ code: 403, data: null });
@@ -233,21 +242,72 @@ describe('实际网关 RBAC 接入 (e2e)', () => {
         headers: { authorization: `Bearer ${token}` },
       });
     expect((await request('and')).statusCode).toBe(403);
-    getPermissions.mockResolvedValueOnce(['system:user:list', 'system:user:edit']);
+    roles = [assignment('operator', ['system:user:list', 'system:user:edit'])];
     expect((await request('and')).statusCode).toBe(200);
+    roles = [assignment('reader')];
     expect((await request('or')).statusCode).toBe(200);
     expect((await request('fallback')).statusCode).toBe(403);
-    getRoles.mockResolvedValueOnce(['operator']);
+    roles = [assignment('operator', [])];
     expect((await request('fallback')).statusCode).toBe(200);
+    roles = [assignment('reader')];
     expect((await request('role-and-permission')).statusCode).toBe(403);
-    getRoles.mockResolvedValueOnce(['admin']);
+    roles = [assignment('admin')];
     expect((await request('role-and-permission')).statusCode).toBe(200);
-    getRoles.mockResolvedValueOnce(['admin']);
-    getPermissions.mockResolvedValueOnce([]);
+    roles = [assignment('admin', [])];
     expect((await request('role-and-permission')).statusCode).toBe(403);
+    roles = [assignment()];
     expect((await request('stacked')).statusCode).toBe(403);
-    getPermissions.mockResolvedValueOnce(['system:user:list', 'system:user:edit']);
+    roles = [assignment('operator', ['system:user:list', 'system:user:edit'])];
     expect((await request('stacked')).statusCode).toBe(200);
+  });
+
+  it.each([
+    'role-disabled',
+    'role-deleted',
+    'user-role-removed',
+    'role-menu-removed',
+    'menu-disabled',
+  ])('原 JWT 不变，授权关联变化后下一次请求拒绝：%s', async (change) => {
+    const request = { url: '/api/rbac-probe/list', headers: { authorization: `Bearer ${token}` } };
+    expect((await app.inject(request)).statusCode).toBe(200);
+    if (change === 'role-disabled') roles[0].role.status = '1';
+    if (change === 'role-deleted') roles[0].role.delFlag = '2';
+    if (change === 'user-role-removed') roles = [];
+    if (change === 'role-menu-removed') roles[0].role.menus = [];
+    if (change === 'menu-disabled') roles[0].role.menus[0].menu.status = '1';
+    expect((await app.inject(request)).statusCode).toBe(403);
+  });
+
+  it('多角色权限取并集；每次授权只执行一次角色菜单查询', async () => {
+    roles = [assignment('reader'), assignment('editor', ['system:user:edit'])];
+    findUnique.mockClear();
+    const response = await app.inject({
+      url: '/api/rbac-probe/and',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(findUnique.mock.calls.filter(([query]) => query.select.roles)).toHaveLength(1);
+    expect(findUnique.mock.calls).toHaveLength(2); // 认证用户检查 + 授权查询。
+  });
+
+  it('请求参数中的角色/权限不能影响服务端授权', async () => {
+    roles = [];
+    const response = await app.inject({
+      url: '/api/rbac-probe/list?userId=2&role=admin&permissions=system:user:list',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(response.statusCode).toBe(403);
+    expect(findUnique.mock.lastCall?.[0]).toMatchObject({ where: { userId: 1n } });
+  });
+
+  it('权限数据库查询故障返回统一 503，不沿用之前的授权结果', async () => {
+    const request = { url: '/api/rbac-probe/list', headers: { authorization: `Bearer ${token}` } };
+    expect((await app.inject(request)).statusCode).toBe(200);
+    authorizationUnavailable = true;
+    const response = await app.inject(request);
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toMatchObject({ code: 503, data: null });
+    expect(response.body).not.toContain('private database detail');
   });
 
   it('撤销当前会话后 Access JWT 立即失效', async () => {
