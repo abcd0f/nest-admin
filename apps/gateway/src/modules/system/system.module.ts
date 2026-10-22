@@ -1,8 +1,8 @@
 import { Global, Module } from '@nestjs/common';
-import { UserModule } from './user/user.module.js';
+import { ExampleModule } from './example/example.module.js';
 
 @Global()
 @Module({
-  imports: [UserModule],
+  imports: [ExampleModule],
 })
 export class SystemModule {}
