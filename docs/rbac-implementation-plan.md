@@ -2,7 +2,7 @@
 
 ## 1. 目标与边界
 
-在不修改任何 Prisma model、字段、关联、索引或数据库迁移的前提下，为 gateway 建立可执行的认证、功能权限和数据范围控制，并提供维护用户、角色、菜单及部门关联的系统管理接口。实现按当前 NestJS 模块组织方式落地，system 下的业务模块参考 `apps/gateway/src/modules/system/example`。
+在不修改 Prisma 字段、关联、索引或数据库迁移的前提下，为 gateway 建立可执行的认证、功能权限和数据范围控制，并提供维护用户、角色、菜单及部门关联的系统管理接口。允许使用不改变数据库结构的 Prisma model 指令（例如 `@updatedAt`）。实现按当前 NestJS 模块组织方式落地，system 下的业务模块参考 `apps/gateway/src/modules/system/example`。
 
 本计划以仓库当前内容和已确认的设计方向为依据：按现有表结构与常见 RBAC 设计实施，认证采用 Access JWT + Redis Refresh Token。后续若出现新的协议或兼容要求，再按实际材料调整对应接口约定；不因此改变 Prisma 表结构。
 
@@ -20,7 +20,7 @@
 
 ## 3. 设计原则
 
-1. 数据库结构保持不变。只使用现有模型及关联表，不运行 `prisma migrate`、`db push` 或 Prisma schema 结构修改。实现阶段通过生成客户端验证当前 schema 与代码所需 API 一致。
+1. 数据库结构保持不变。只使用现有模型及关联表，不运行 `prisma migrate` 或 `db push`；可调整不改变数据库结构的 Prisma model 指令。实现阶段通过生成客户端验证当前 schema 与代码所需 API 一致。
 2. 区分认证与授权。认证确认请求者身份并构造可信用户上下文；功能授权根据菜单权限标识判定；数据授权根据角色 `dataScope` 生成业务查询约束。
 3. 服务端鉴权为准。前端路由和按钮权限由接口返回以控制展示，但不能代替 API 守卫或业务查询的数据过滤。
 4. 默认最小权限。未标注公开或所需权限的受保护接口拒绝未认证请求；无权限元数据的认证接口不应被意外当成公开接口。
@@ -149,7 +149,7 @@
 
 已在 `SystemModule` 注册认证业务模块，交付登录、刷新、退出、本人资料和菜单树五个端点；复用既有 JWT/Redis 会话与实时权限查询。账号歧义拒绝、统一错误、脱敏、登录审计、菜单树边界、Swagger 和验证方式见[阶段 4 接口说明](./rbac-phase4-auth-api.md)。正常刷新仅消费旧 Refresh Token；旧 Access Token 仍可使用至到期，重放或登出则撤销该设备全部令牌，其他设备不受影响。
 
-### 阶段 5：实现 RBAC 管理 API
+### 阶段 5：实现 RBAC 管理 API（已完成）
 
 1. 建立 system 下 `user`、`role`、`menu`、`dept` 模块，文件布局和 DTO 风格参照 `example`。
 2. 用户服务负责用户基本资料、状态、逻辑删除、部门和角色关联；角色服务负责角色基本资料、状态、逻辑删除、菜单关联、数据范围和自定义部门关联。
@@ -159,6 +159,10 @@
 6. 仅实现 RBAC 必需的管理字段和操作，不扩展与当前 schema 不匹配的权限实体。
 
 **验收：** 可创建和维护用户/角色/菜单/部门关联，关联更新具备事务性；所有管理 API 受认证和权限守卫保护。
+
+四个管理模块已接入 `SystemModule`，接口、字段映射、引用和管理员保护规则及验证见[阶段 5 管理 API 说明](./rbac-phase5-admin-api.md)。
+
+管理列表直接将 `this.prisma.user` / `this.prisma.role` 传给 `paginate(this.prisma.<model>, { ...query, where })`；关联集合在分页后单独查询。公共树组装导出自 `libs/common/src/utils`。响应统一经 `toDto`、`toDtoList` 或 `toPageDto` 映射到逐字段 `@Expose()` 的 DTO，BigInt ID 使用 `@Type(() => String)`，日期使用 `@DateFormat()`；业务模块内不再设置共享 RBAC 服务目录或通用资源/响应包装方法。
 
 ### 阶段 6：落实数据范围到业务查询
 

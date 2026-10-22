@@ -1,0 +1,153 @@
+import { PageMetaDto, PageQueryDto } from '@app/common';
+import { DateFormat } from '@app/core';
+import { PartialType } from '@nestjs/swagger';
+import { Exclude, Expose, Type } from 'class-transformer';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+  ValidateIf,
+} from 'class-validator';
+
+export class CreateRoleDto {
+  /** 角色名称。 */
+  @IsString()
+  @Matches(/\S/)
+  @MaxLength(64)
+  roleName!: string;
+
+  /** 角色标识，未删除角色内精确查重，不允许空白和通配符。 */
+  @IsString()
+  @Matches(/^[^\s*]+$/)
+  @MaxLength(64)
+  roleKey!: string;
+
+  /** 显示顺序，缺省 0。 */
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsInt()
+  @Min(0)
+  @Max(2147483647)
+  orderNum?: number;
+
+  /** 状态：0 启用、1 停用，缺省 0。 */
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsIn(['0', '1'])
+  status?: string;
+
+  /** 备注；null 清空。 */
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  remark?: string | null;
+}
+
+export class UpdateRoleDto extends PartialType(CreateRoleDto, { skipNullProperties: false }) {}
+
+export class RoleQueryDto extends PageQueryDto {
+  /** 角色名称包含匹配。 */
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  @MaxLength(64)
+  roleName?: string;
+
+  /** 角色标识精确匹配。 */
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  @MaxLength(64)
+  roleKey?: string;
+
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsIn(['0', '1'])
+  status?: string;
+
+  /** 排序白名单，缺省 createTime 降序。 */
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsIn(['roleId', 'roleName', 'roleKey', 'orderNum', 'createTime'])
+  declare orderByColumn?: string;
+}
+
+export class AssignRoleMenusDto {
+  /** 完整替换菜单集合；不会隐式补入父节点，空数组清空。 */
+  @IsArray()
+  @ArrayMaxSize(1000)
+  @IsString({ each: true })
+  @Matches(/^[1-9]\d{0,18}$/, { each: true })
+  @MaxLength(19, { each: true })
+  @Type(() => String)
+  menuIds!: string[];
+}
+
+export class RoleDataScopeDto {
+  /** 1 全部、2 自定义、3 本部门、4 本部门及以下、5 本人、6 部门及以下或本人。 */
+  @IsIn(['1', '2', '3', '4', '5', '6'])
+  dataScope!: string;
+
+  /** 仅 dataScope=2 使用且必须非空；其他范围须省略或传空数组。 */
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsArray()
+  @ArrayMaxSize(1000)
+  @IsString({ each: true })
+  @Matches(/^[1-9]\d{0,18}$/, { each: true })
+  @MaxLength(19, { each: true })
+  @Type(() => String)
+  deptIds?: string[];
+}
+
+@Exclude()
+export class RoleResponseDto {
+  @Expose()
+  @Type(() => String)
+  roleId!: string;
+
+  @Expose()
+  roleName!: string;
+
+  @Expose()
+  roleKey!: string;
+
+  @Expose()
+  orderNum!: number;
+
+  @Expose()
+  status!: string;
+
+  @Expose()
+  dataScope!: string;
+
+  @Expose()
+  @Type(() => String)
+  menuIds!: string[];
+
+  @Expose()
+  @Type(() => String)
+  deptIds!: string[];
+
+  @Expose()
+  remark!: string | null;
+
+  @Expose()
+  @DateFormat()
+  createTime!: Date;
+
+  @Expose()
+  @DateFormat()
+  updateTime!: Date | null;
+}
+
+@Exclude()
+export class RolePageDto {
+  @Expose()
+  @Type(() => RoleResponseDto)
+  items!: RoleResponseDto[];
+
+  @Expose()
+  @Type(() => PageMetaDto)
+  meta!: PageMetaDto;
+}

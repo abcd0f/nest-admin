@@ -176,6 +176,26 @@ describe('实际网关 RBAC 接入 (e2e)', () => {
     expect(response.json()).toEqual({ code: 401, data: null, message: '未认证' });
   });
 
+  it.each([
+    ['GET', '/api/system/users'],
+    ['GET', '/api/system/roles'],
+    ['GET', '/api/system/menus'],
+    ['GET', '/api/system/depts'],
+    ['PATCH', '/api/system/users/1/roles'],
+    ['PATCH', '/api/system/roles/1/menus'],
+    ['PATCH', '/api/system/roles/1/data-scope'],
+  ] as const)('RBAC 管理端点 $method $url 要求认证且检查独立功能权限', async (method, url) => {
+    roles = [assignment('operator', [])];
+    expect((await app.inject({ method, url })).statusCode).toBe(401);
+    const response = await app.inject({
+      method,
+      url,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({ code: 403, data: null });
+  });
+
   it('有效 JWT、会话、用户检查后可获取可信上下文，禁用用户立即失效', async () => {
     const response = await app.inject({
       url: '/api/rbac-probe/profile',
