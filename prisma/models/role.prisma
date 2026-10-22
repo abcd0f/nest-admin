@@ -9,7 +9,7 @@ model Role {
   /// 显示顺序
   orderNum   Int      @default(0) @map("order_num")
   /// 数据范围：1 全部、2 自定义、3 本部门、4 本部门及以下、5 本人、6 部门及以下或本人
-  dataScope  String   @default("5") @map("data_scope") @db.Char(1)
+  dataScope  String   @default("") @map("data_scope") @db.Char(1)
   /// 菜单树选择项是否关联显示；为 true 时角色菜单回显只返回末级节点，父节点由前端推导为半选
   menuCheckStrictly Boolean @default(true) @map("menu_check_strictly")
   /// 部门树选择项是否关联显示；为 true 时角色部门回显只返回末级节点
