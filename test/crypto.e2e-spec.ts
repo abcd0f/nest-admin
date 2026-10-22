@@ -1,3 +1,5 @@
+/* eslint-disable perfectionist/sort-imports -- 配置 mock 必须先于 AppConfigModule 导入。 */
+import './helpers/auth-config-source.js';
 import type { ApiDecryptConfig } from '@app/config';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { createFastifyAdapter } from '@app/common';
@@ -8,6 +10,7 @@ import { All, BadRequestException, Body, Controller, Get, Module } from '@nestjs
 import { Test } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createCryptoConfig, decryptResponse, encryptRequest } from './helpers/api-crypto-client.js';
+/* eslint-enable perfectionist/sort-imports */
 
 @Controller('crypto-probe')
 class CryptoProbeController {

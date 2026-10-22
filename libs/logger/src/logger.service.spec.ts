@@ -1,3 +1,5 @@
+/* eslint-disable perfectionist/sort-imports -- 配置 mock 必须先于 AppConfigModule 导入。 */
+import '../../../test/helpers/auth-config-source.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +12,7 @@ import { readLogRecords } from '../../../test/helpers/read-log-records.js';
 import { loggerDomain } from '../../config/src/domains/logger.domain.js';
 import { LoggerModule } from './logger.module.js';
 import { LoggerService } from './logger.service.js';
+/* eslint-enable perfectionist/sort-imports */
 
 describe('nest 日志桥接与生命周期', () => {
   it('原有 Nest Logger 自动写入两个文件，app.close 前的最后一条错误落盘', async () => {
