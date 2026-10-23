@@ -1,7 +1,7 @@
 import type { AuthenticatedUser } from '@app/auth';
 import { CurrentUser } from '@app/auth';
 import { Permission } from '@app/permission';
-import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Inject, Param, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth } from '@nestjs/swagger';
 import {
   AssignUserRolesDto,
@@ -14,13 +14,13 @@ import {
 import { UserService } from './user.service.js';
 
 /** 系统用户管理。 */
-@Controller('system/users')
+@Controller('system/user')
 @ApiBearerAuth()
 export class UserController {
   constructor(@Inject(UserService) private readonly service: UserService) {}
 
   /** 分页查询未删除用户，不返回密码或内部登录信息。 */
-  @Get()
+  @Get('list')
   @Permission('system:user:list')
   findAll(
     @Query() query: UserQueryDto,
@@ -50,7 +50,7 @@ export class UserController {
   }
 
   /** 更新基本资料、密码、部门或状态，不能停用本人。 */
-  @Patch(':id')
+  @Put(':id')
   @Permission('system:user:edit')
   update(
     @Param('id') id: string,
@@ -60,8 +60,8 @@ export class UserController {
     return this.service.update(id, body, actor);
   }
 
-  /** 事务内完整替换角色，保护最后一位有效管理员。 */
-  @Patch(':id/roles')
+  /** 事务内完整替换角色，保护最后一位有效管理员。路径对齐 Java `PUT /system/user/authRole`。 */
+  @Put('authRole/:id')
   @Permission('system:user:assignRoles')
   assignRoles(
     @Param('id') id: string,

@@ -47,7 +47,7 @@ export class CreateRoleDto {
   /**
    * 菜单树选择项是否关联显示，缺省 true。
    *
-   * 只影响角色菜单回显（`GET /system/roles/:id/menu-tree`）：为 true 时剔除父节点，
+   * 只影响角色菜单回显（`GET /system/role/menuTree/:id`）：为 true 时剔除父节点，
    * 让前端把部分勾选的父节点渲染成半选。不参与权限计算。
    */
   @ValidateIf((_object, value) => value !== undefined)

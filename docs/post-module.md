@@ -22,24 +22,24 @@
 
 | 方法 | 路径 | 权限码 | 说明 |
 | --- | --- | --- | --- |
-| GET | `/system/posts` | `system:post:list` | 分页；支持 `postCode`/`postName` 包含、`status`、`deptId` 精确；受数据范围约束 |
-| GET | `/system/posts/options` | `system:post:query` | 下拉：仅启用岗位，可选 `?deptId=`；受数据范围约束 |
-| GET | `/system/posts/:id` | `system:post:query` | 详情；范围外返回 404 |
-| POST | `/system/posts` | `system:post:add` | 创建；目标部门必须在范围内，否则 403 |
-| PATCH | `/system/posts/:id` | `system:post:edit` | 更新；换部门同样校验范围；已分配用户不能停用 |
-| DELETE | `/system/posts/:id` | `system:post:delete` | 逻辑删除；已分配用户不能删除 |
+| GET | `/system/post/list` | `system:post:list` | 分页；支持 `postCode`/`postName` 包含、`status`、`deptId` 精确；受数据范围约束 |
+| GET | `/system/post/optionselect` | `system:post:query` | 下拉：仅启用岗位，可选 `?deptId=`；受数据范围约束 |
+| GET | `/system/post/:id` | `system:post:query` | 详情；范围外返回 404 |
+| POST | `/system/post` | `system:post:add` | 创建；目标部门必须在范围内，否则 403 |
+| PUT | `/system/post/:id` | `system:post:edit` | 更新；换部门同样校验范围；已分配用户不能停用 |
+| DELETE | `/system/post/:id` | `system:post:delete` | 逻辑删除；已分配用户不能删除 |
 
-`options` 必须声明在 `:id` 之前，否则 `options` 会被当成 ID 解析。
+`optionselect` 必须声明在 `:id` 之前，否则会被当成 ID 解析。路径名对齐 Java 的 `/system/post/optionselect`。
 
 ## 3. 用户岗位分配
 
 对齐 Java 的 `SysUserBo.postIds`——岗位不单独开分配接口，随用户创建/更新一起提交：
 
 ```http
-POST /system/users
+POST /system/user
 { "userName": "alice", "nickName": "Alice", "password": "...", "postIds": ["5", "6"] }
 
-PATCH /system/users/9
+PUT /system/user/9
 { "postIds": [] }        // 空数组 = 清空；字段省略 = 不改动
 ```
 
@@ -48,7 +48,7 @@ PATCH /system/users/9
 - 用户列表/详情/创建/更新/分配角色的响应都带 `postIds`。
 - 删除用户时一并清理 `sys_user_post`。
 
-与角色的差别：角色有独立的 `PATCH /system/users/:id/roles` 端点和 `system:user:assignRoles` 权限；岗位没有独立端点，编辑用户即可改岗位，权限沿用 `system:user:edit`。
+与角色的差别：角色有独立的 `PUT /system/user/authRole/:id` 端点和 `system:user:assignRoles` 权限；岗位没有独立端点，编辑用户即可改岗位，权限沿用 `system:user:edit`。
 
 ## 4. 数据范围
 

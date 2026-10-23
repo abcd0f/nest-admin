@@ -1,7 +1,7 @@
 import type { AuthenticatedUser } from '@app/auth';
 import { CurrentUser } from '@app/auth';
 import { Permission } from '@app/permission';
-import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Inject, Param, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth } from '@nestjs/swagger';
 import {
   AssignRoleMenusDto,
@@ -17,13 +17,13 @@ import {
 import { RoleService } from './role.service.js';
 
 /** 系统角色管理。 */
-@Controller('system/roles')
+@Controller('system/role')
 @ApiBearerAuth()
 export class RoleController {
   constructor(@Inject(RoleService) private readonly service: RoleService) {}
 
   /** 分页查询未删除角色。 */
-  @Get()
+  @Get('list')
   @Permission('system:role:list')
   findAll(@Query() query: RoleQueryDto): Promise<RolePageDto> {
     return this.service.findAll(query);
@@ -36,15 +36,20 @@ export class RoleController {
     return this.service.findOne(id);
   }
 
-  /** 角色菜单回显：已选 ID 按 menuCheckStrictly 裁剪父节点，另返回完整菜单树。 */
-  @Get(':id/menu-tree')
+  /**
+   * 角色菜单回显：已选 ID 按 menuCheckStrictly 裁剪父节点，另返回完整菜单树。
+   *
+   * Java 对应 `GET /system/menu/roleMenuTreeselect/{roleId}`，挂在菜单控制器下。
+   * 这里留在角色控制器：菜单模块已被角色模块依赖，反向注入会形成循环。
+   */
+  @Get('menuTree/:id')
   @Permission('system:role:query')
   menuTree(@Param('id') id: string): Promise<RoleMenuTreeDto> {
     return this.service.menuTreeSelect(id);
   }
 
-  /** 角色部门回显：已选 ID 按 deptCheckStrictly 裁剪父节点，另返回完整部门树。 */
-  @Get(':id/dept-tree')
+  /** 角色部门回显：已选 ID 按 deptCheckStrictly 裁剪父节点，另返回完整部门树。对齐 Java `/system/role/deptTree/{roleId}`。 */
+  @Get('deptTree/:id')
   @Permission('system:role:query')
   deptTree(
     @Param('id') id: string,
@@ -64,7 +69,7 @@ export class RoleController {
   }
 
   /** 更新角色基本资料或状态。 */
-  @Patch(':id')
+  @Put(':id')
   @Permission('system:role:edit')
   update(
     @Param('id') id: string,
@@ -74,8 +79,8 @@ export class RoleController {
     return this.service.update(id, body, actor);
   }
 
-  /** 事务内完整替换菜单关联，保护最后一位有效管理员。 */
-  @Patch(':id/menus')
+  /** 事务内完整替换菜单关联。Java 没有独立端点，菜单随角色更新一起提交；这里拆分以便单独授权。 */
+  @Put('menus/:id')
   @Permission('system:role:assignMenus')
   assignMenus(
     @Param('id') id: string,
@@ -85,8 +90,8 @@ export class RoleController {
     return this.service.assignMenus(id, body, actor);
   }
 
-  /** 同一事务更新数据范围和自定义部门集合；查询过滤在阶段 6 接入。 */
-  @Patch(':id/data-scope')
+  /** 同一事务更新数据范围和自定义部门集合。路径对齐 Java `/system/role/dataScope`。 */
+  @Put('dataScope/:id')
   @Permission('system:role:dataScope')
   dataScope(
     @Param('id') id: string,

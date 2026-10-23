@@ -194,21 +194,21 @@ describe('实际网关 RBAC 接入 (e2e)', () => {
 
   it('健康检查公开，管理接口默认受认证保护，错误沿用统一响应', async () => {
     expect((await app.inject({ url: '/api' })).statusCode).toBe(200);
-    const response = await app.inject({ url: '/api/system/users' });
+    const response = await app.inject({ url: '/api/system/user/list' });
     expect(response.statusCode).toBe(401);
     expect(response.json()).toEqual({ code: 401, data: null, message: '未认证' });
   });
 
   it.each([
-    ['GET', '/api/system/users'],
-    ['GET', '/api/system/roles'],
-    ['GET', '/api/system/menus'],
-    ['GET', '/api/system/depts'],
-    ['GET', '/api/system/roles/1/menu-tree'],
-    ['GET', '/api/system/roles/1/dept-tree'],
-    ['PATCH', '/api/system/users/1/roles'],
-    ['PATCH', '/api/system/roles/1/menus'],
-    ['PATCH', '/api/system/roles/1/data-scope'],
+    ['GET', '/api/system/user/list'],
+    ['GET', '/api/system/role/list'],
+    ['GET', '/api/system/menu/list'],
+    ['GET', '/api/system/dept/list'],
+    ['GET', '/api/system/role/menuTree/1'],
+    ['GET', '/api/system/role/deptTree/1'],
+    ['PUT', '/api/system/user/authRole/1'],
+    ['PUT', '/api/system/role/menus/1'],
+    ['PUT', '/api/system/role/dataScope/1'],
   ] as const)('RBAC 管理端点 $method $url 要求认证且检查独立功能权限', async (method, url) => {
     roles = [assignment('operator', [])];
     // 权限在登录时算进快照，所以要重新登录才能反映新的授权关系。

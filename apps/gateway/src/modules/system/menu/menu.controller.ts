@@ -1,19 +1,19 @@
 import type { AuthenticatedUser } from '@app/auth';
 import { CurrentUser } from '@app/auth';
 import { Permission } from '@app/permission';
-import { Body, Controller, Delete, Get, Inject, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Inject, Param, Post, Put } from '@nestjs/common';
 import { ApiBearerAuth } from '@nestjs/swagger';
 import { CreateMenuDto, MenuResponseDto, MenuTreeDto, UpdateMenuDto } from './dto/menu.dto.js';
 import { MenuService } from './menu.service.js';
 
 /** 系统菜单、按钮管理。 */
-@Controller('system/menus')
+@Controller('system/menu')
 @ApiBearerAuth()
 export class MenuController {
   constructor(@Inject(MenuService) private readonly service: MenuService) {}
 
   /** 查询管理菜单树，包含隐藏/停用节点和按钮。 */
-  @Get()
+  @Get('list')
   @Permission('system:menu:list')
   findAll(): Promise<MenuTreeDto[]> {
     return this.service.findAll();
@@ -37,7 +37,7 @@ export class MenuController {
   }
 
   /** 更新路由展示字段、权限码、状态或父节点，禁止循环及不兼容类型变更。 */
-  @Patch(':id')
+  @Put(':id')
   @Permission('system:menu:edit')
   update(
     @Param('id') id: string,

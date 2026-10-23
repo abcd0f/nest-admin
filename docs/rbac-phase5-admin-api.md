@@ -5,6 +5,8 @@
 > 1. **"最后一位管理员"保护已移除。** 不再有 `managementPermissions` 清单，也不再在事务内比较写入前后的管理员存在性。现在与 RuoYi 一致，只靠"1 号超管账号不可改/删/停用"兜底。
 > 2. **权限载体改为登录快照。** 管理写操作提交后会调用 `revokeUserSessions` 撤销受影响用户的会话；下文第 66 行"管理员检查"相关表述不再适用。
 >
+> 3. **路由已改为对齐 RuoYi 命名**（2026-10-23）：资源名改单数、列表加 `/list`、动作段用 Java 的 `authRole` / `dataScope` / `deptTree` / `optionselect`。动词已改为 `PUT`（与 Java 一致），但 **id 仍在路径**、删除仍是 `DELETE /:id` 单条，未改成 Java 的 id 在 body 和批量删除。
+>
 > 当前实现以 `docs/rbac-compare-ruoyi-plus.md` 第 3、5 节为准。
 
 阶段 5 在 `apps/gateway/src/modules/system` 加入 `user`、`role`、`menu`、`dept` 四个业务模块，均通过 `PrismaService` 使用现有 Prisma 模型。`SystemModule` 同时继续注册认证端点和示例模块。四个模型的 `updateTime` 使用 Prisma `@updatedAt` 客户端指令；没有修改数据库字段、表结构或迁移，也没有写入业务数据或创建默认管理员。
@@ -13,14 +15,14 @@
 
 ## 用户
 
-| 方法   | 路径                      | 权限                      |
-| ------ | ------------------------- | ------------------------- |
-| GET    | `/system/users`           | `system:user:list`        |
-| GET    | `/system/users/:id`       | `system:user:query`       |
-| POST   | `/system/users`           | `system:user:add`         |
-| PATCH  | `/system/users/:id`       | `system:user:edit`        |
-| PATCH  | `/system/users/:id/roles` | `system:user:assignRoles` |
-| DELETE | `/system/users/:id`       | `system:user:delete`      |
+| 方法   | 路径                       | 权限                      |
+| ------ | -------------------------- | ------------------------- |
+| GET    | `/system/user/list`        | `system:user:list`        |
+| GET    | `/system/user/:id`         | `system:user:query`       |
+| POST   | `/system/user`             | `system:user:add`         |
+| PUT    | `/system/user/:id`         | `system:user:edit`        |
+| PUT    | `/system/user/authRole/:id`| `system:user:assignRoles` |
+| DELETE | `/system/user/:id`         | `system:user:delete`      |
 
 列表直接调用 `paginate(this.prisma.user, { ...query, where })`，默认只查询 `delFlag='0'`，支持账号包含匹配、部门和状态精确筛选。可排序字段为 `userId`、`userName`、`nickName` 和 `createTime`，分页由 `PageQueryDto` 限制；当前页角色关联通过 `UserRole` 单独读取。创建时账号在未删除用户中精确查重；密码经现有 Argon2id `PasswordHashService` 哈希后写入，绝不进入响应。资料更新允许可选改密、部门和状态；部门必须启用且未删除，`deptId: null` 清除所属部门。
 
@@ -28,15 +30,17 @@
 
 ## 角色
 
-| 方法   | 路径                           | 权限                      |
-| ------ | ------------------------------ | ------------------------- |
-| GET    | `/system/roles`                | `system:role:list`        |
-| GET    | `/system/roles/:id`            | `system:role:query`       |
-| POST   | `/system/roles`                | `system:role:add`         |
-| PATCH  | `/system/roles/:id`            | `system:role:edit`        |
-| PATCH  | `/system/roles/:id/menus`      | `system:role:assignMenus` |
-| PATCH  | `/system/roles/:id/data-scope` | `system:role:dataScope`   |
-| DELETE | `/system/roles/:id`            | `system:role:delete`      |
+| 方法   | 路径                       | 权限                      |
+| ------ | -------------------------- | ------------------------- |
+| GET    | `/system/role/list`        | `system:role:list`        |
+| GET    | `/system/role/:id`         | `system:role:query`       |
+| GET    | `/system/role/menuTree/:id`| `system:role:query`       |
+| GET    | `/system/role/deptTree/:id`| `system:role:query`       |
+| POST   | `/system/role`             | `system:role:add`         |
+| PUT    | `/system/role/:id`         | `system:role:edit`        |
+| PUT    | `/system/role/menus/:id`   | `system:role:assignMenus` |
+| PUT    | `/system/role/dataScope/:id`| `system:role:dataScope`  |
+| DELETE | `/system/role/:id`         | `system:role:delete`      |
 
 角色列表直接调用 `paginate(this.prisma.role, { ...query, where })`，角色菜单和自定义部门关联在分页后分别读取。角色键 `roleKey` 在未删除角色中精确查重；创建时默认 `dataScope='5'`、无菜单或自定义部门。菜单端点完整替换 `RoleMenu`，显式校验每个被关联菜单启用且存在，不会自动补父目录或授予子树。数据范围端点在同一事务更新 `Role.dataScope` 与 `RoleDept`：`dataScope='2'` 要求至少一个启用部门；其他范围拒绝非空 `deptIds` 并清除过期自定义关联。此阶段提供范围配置，不将范围过滤静默应用到没有业务归属字段的模型；实际业务读写隔离属于阶段 6。
 
@@ -46,11 +50,11 @@
 
 | 方法   | 路径                | 权限                 |
 | ------ | ------------------- | -------------------- |
-| GET    | `/system/menus`     | `system:menu:list`   |
-| GET    | `/system/menus/:id` | `system:menu:query`  |
-| POST   | `/system/menus`     | `system:menu:add`    |
-| PATCH  | `/system/menus/:id` | `system:menu:edit`   |
-| DELETE | `/system/menus/:id` | `system:menu:delete` |
+| GET    | `/system/menu/list` | `system:menu:list`   |
+| GET    | `/system/menu/:id`  | `system:menu:query`  |
+| POST   | `/system/menu`      | `system:menu:add`    |
+| PUT    | `/system/menu/:id`  | `system:menu:edit`   |
+| DELETE | `/system/menu/:id`  | `system:menu:delete` |
 
 管理树通过 `libs/common/src/utils` 的 `toTree` 及 `Menu.parentId` 组装，包含 M/C/F、隐藏和停用节点，按 `orderNum`、BigInt ID 稳定排序。缺父节点或存在循环时返回冲突以便先修复数据。M/C 只能位于目录下，F 必须位于菜单下；目录不能设操作权限码，按钮必须填写不含通配符的权限码。更新父节点、类型及权限码前验证父链和直接子节点，禁止形成环或留下不兼容的子类型。菜单没有删除标记，因此物理删除前必须无子节点且无 `RoleMenu` 引用；不级联清除权限数据。
 
@@ -58,11 +62,11 @@
 
 | 方法   | 路径                | 权限                 |
 | ------ | ------------------- | -------------------- |
-| GET    | `/system/depts`     | `system:dept:list`   |
-| GET    | `/system/depts/:id` | `system:dept:query`  |
-| POST   | `/system/depts`     | `system:dept:add`    |
-| PATCH  | `/system/depts/:id` | `system:dept:edit`   |
-| DELETE | `/system/depts/:id` | `system:dept:delete` |
+| GET    | `/system/dept/list` | `system:dept:list`   |
+| GET    | `/system/dept/:id`  | `system:dept:query`  |
+| POST   | `/system/dept`      | `system:dept:add`    |
+| PUT    | `/system/dept/:id`  | `system:dept:edit`   |
+| DELETE | `/system/dept/:id`  | `system:dept:delete` |
 
 管理树通过 `libs/common/src/utils` 的 `toTree` 组装，仅显示未删除部门并保留停用节点。`ancestors` 不接受客户端写入，由服务端按 `/根ID/.../自身ID/` 生成，超过既有 512 字符上限即拒绝。创建或移动时沿 `parentId` 解析完整启用父链，通过循环/后代检查后，在同一 Serializable 事务重算所有未删除后代路径。规范 ID 与 BigInt 路径长度均在转换时检查；不依赖字符串前缀判断父子边界。负责人必须是启用且未删除用户，也可显式设为 null。
 

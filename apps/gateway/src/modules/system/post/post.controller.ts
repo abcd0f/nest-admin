@@ -1,7 +1,7 @@
 import type { AuthenticatedUser } from '@app/auth';
 import { CurrentUser } from '@app/auth';
 import { Permission } from '@app/permission';
-import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Inject, Param, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth } from '@nestjs/swagger';
 import {
   CreatePostDto,
@@ -15,13 +15,13 @@ import {
 import { PostService } from './post.service.js';
 
 /** 系统岗位管理。 */
-@Controller('system/posts')
+@Controller('system/post')
 @ApiBearerAuth()
 export class PostController {
   constructor(@Inject(PostService) private readonly service: PostService) {}
 
   /** 分页查询未删除岗位，受数据范围约束。 */
-  @Get()
+  @Get('list')
   @Permission('system:post:list')
   findAll(
     @Query() query: PostQueryDto,
@@ -30,8 +30,8 @@ export class PostController {
     return this.service.findAll(query, actor);
   }
 
-  /** 岗位下拉：只返回启用岗位，可按部门过滤。必须声明在 `:id` 之前。 */
-  @Get('options')
+  /** 岗位下拉：只返回启用岗位，可按部门过滤。对齐 Java `/system/post/optionselect`。 */
+  @Get('optionselect')
   @Permission('system:post:query')
   options(
     @Query() query: PostOptionQueryDto,
@@ -61,7 +61,7 @@ export class PostController {
   }
 
   /** 更新岗位；已分配用户的岗位不能停用。 */
-  @Patch(':id')
+  @Put(':id')
   @Permission('system:post:edit')
   update(
     @Param('id') id: string,

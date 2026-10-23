@@ -437,7 +437,7 @@ RuoYi 的优势在于**能力密度**：一个注解就把 SQL 改了，业务�
 
 1. ~~补数据权限执行器~~ 已完成，见 `docs/rbac-phase6-data-scope.md`。
 2. ~~补操作级数据权限校验~~ 已完成：详情/更新/删除/分配角色都带范围条件，越权返回 404；创建校验目标部门。
-3. ~~补岗位模块或删表~~ 已完成：`/system/posts` CRUD + 下拉，用户创建/更新时提交 `postIds`。见 `docs/post-module.md`。
+3. ~~补岗位模块或删表~~ 已完成：`/system/post` CRUD + 下拉，用户创建/更新时提交 `postIds`。见 `docs/post-module.md`。
 4. **补操作日志（P1）**。`OperLog`/`LoginLog` 两个 model 空转，合规审计场景会卡住。Nest 里用 Interceptor + `@Log()` 装饰器实现，比 Spring AOP 更简单。
 5. **补登录失败锁定（P2）**。`dummyHash` 只防枚举，不防爆破；`ThrottlerGuard` 是全局限流，不能替代按账号计数。
 6. **菜单权限码常量化（P2）**。`'system:user:list'` 这类字符串散落在 25 个注解里，改名靠全局搜索。抽成 `const PERMISSIONS = { user: { list: 'system:user:list', ... } }` 能消掉一类低级错误。
@@ -478,3 +478,77 @@ RuoYi 的优势在于**能力密度**：一个注解就把 SQL 改了，业务�
 | 令牌 | JWT（Sa-Token 简单模式） | JWT HS256 + Redis Refresh |
 | 主键类型 | `Long`（bigint） | `BigInt` → JSON 十进制字符串 |
 | 数据访问 | MyBatis-Plus | Prisma 7 |
+
+---
+
+## 12. 路由对照表
+
+2026-10-23 起，管理端点路径按 Java 命名对齐：资源名单数、列表统一 `/list`、动作段沿用 Java 的 `authRole` / `dataScope` / `deptTree` / `menuTree` / `optionselect`。
+
+**动词已对齐 `PUT`，请求体没有**：Java 的 `PUT` 把 id 放在 body（`PUT /system/user`），删除支持 `DELETE /{ids}` 批量；本项目是 `PUT /:id`、`DELETE /:id` 单条。id 留在路径上是有意取舍——挪进 body 要改所有更新 DTO、service 签名和批量删除语义，收益只是"看起来一样"。
+
+### 12.1 用户
+
+| 能力 | RuoYi-Vue-Plus | nest-admin |
+| --- | --- | --- |
+| 列表 | `GET /system/user/list` | `GET /system/user/list` |
+| 详情 | `GET /system/user/{userId}` | `GET /system/user/:id` |
+| 新增 | `POST /system/user` | `POST /system/user` |
+| 修改 | `PUT /system/user`（id 在 body） | `PUT /system/user/:id`（id 在路径） |
+| 删除 | `DELETE /system/user/{userIds}` | `DELETE /system/user/:id` |
+| 分配角色 | `PUT /system/user/authRole`（body 带 userId） | `PUT /system/user/authRole/:id` |
+| 当前用户信息 | `GET /system/user/getInfo` | `GET /auth/profile` |
+| 用户部门树 | `GET /system/user/deptTree` | 无（用 `GET /system/dept/list`） |
+| 岗位下拉 | `GET /system/user/optionselect` | 无（用 `GET /system/post/optionselect`） |
+
+### 12.2 角色
+
+| 能力 | RuoYi-Vue-Plus | nest-admin |
+| --- | --- | --- |
+| 列表 | `GET /system/role/list` | `GET /system/role/list` |
+| 详情 | `GET /system/role/{roleId}` | `GET /system/role/:id` |
+| 新增 | `POST /system/role` | `POST /system/role` |
+| 修改 | `PUT /system/role` | `PUT /system/role/:id` |
+| 删除 | `DELETE /system/role/{roleIds}` | `DELETE /system/role/:id` |
+| 数据范围 | `PUT /system/role/dataScope` | `PUT /system/role/dataScope/:id` |
+| 部门回显 | `GET /system/role/deptTree/{roleId}` | `GET /system/role/deptTree/:id` |
+| 菜单回显 | `GET /system/menu/roleMenuTreeselect/{roleId}` | `GET /system/role/menuTree/:id` |
+| 分配菜单 | 无独立端点（随角色更新提交 `menuIds`） | `PUT /system/role/menus/:id` |
+| 状态变更 | `PUT /system/role/changeStatus` | 无（`PUT /system/role/:id` 带 `status`） |
+| 已分配/未分配用户 | `GET /system/role/authUser/{allocatedList,unallocatedList}` | 未实现 |
+
+`menuTree` 留在角色控制器而不是 `/system/menu/roleMenuTreeselect/{roleId}`：`RoleModule` 已依赖 `MenuModule`，反向注入会形成循环。
+
+### 12.3 菜单 / 部门 / 岗位
+
+| 能力 | RuoYi-Vue-Plus | nest-admin |
+| --- | --- | --- |
+| 菜单列表 | `GET /system/menu/list`（扁平） | `GET /system/menu/list`（**返回树**） |
+| 菜单详情 | `GET /system/menu/{menuId}` | `GET /system/menu/:id` |
+| 菜单增改删 | `POST` / `PUT` / `DELETE /{menuId}` | `POST` / `PUT /:id` / `DELETE /:id` |
+| 当前用户路由 | `GET /system/menu/getRouters` | `GET /auth/menus` |
+| 菜单下拉树 | `GET /system/menu/treeselect` | 无（`/list` 已返回树） |
+| 部门列表 | `GET /system/dept/list` | `GET /system/dept/list` |
+| 部门增改删 | `POST` / `PUT` / `DELETE /{deptId}` | `POST` / `PUT /:id` / `DELETE /:id` |
+| 排除节点树 | `GET /system/dept/list/exclude/{deptId}` | 未实现 |
+| 岗位列表 | `GET /system/post/list` | `GET /system/post/list` |
+| 岗位下拉 | `GET /system/post/optionselect` | `GET /system/post/optionselect` |
+| 岗位增改删 | `POST` / `PUT` / `DELETE /{postIds}` | `POST` / `PUT /:id` / `DELETE /:id` |
+| 岗位部门树 | `GET /system/post/deptTree` | 无（用 `GET /system/dept/list`） |
+
+### 12.4 认证
+
+| 能力 | RuoYi-Vue-Plus | nest-admin |
+| --- | --- | --- |
+| 登录 | `POST /auth/login` | `POST /auth/login` |
+| 登出 | `POST /auth/logout` | `POST /auth/logout` |
+| 刷新令牌 | 无（Sa-Token 自动续期） | `POST /auth/refresh` |
+| 验证码 | `GET /auth/code` | 未实现 |
+| 当前用户 | `GET /system/user/getInfo` | `GET /auth/profile` |
+| 路由菜单 | `GET /system/menu/getRouters` | `GET /auth/menus` |
+
+### 12.5 仍未对齐的部分
+
+1. **请求体与删除语义**：id 在路径 vs body、单条删除 vs `DELETE /{ids}` 批量。动词已经统一为 `PUT`。
+2. **响应结构**：RuoYi 是 `{code, msg, data}`，本项目是 `{code:0, data, message}`，分页是 `{items, meta}` vs `{rows, total}`。要对齐前端，这层比路径更关键。
+3. **`/auth/profile`、`/auth/menus`**：仍是 nest 自己的命名，没有迁到 `/system/user/getInfo`、`/system/menu/getRouters`——它们和认证会话绑在一起，迁过去会让 `auth` 模块散到 `system` 下。

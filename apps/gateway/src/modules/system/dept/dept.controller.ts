@@ -1,19 +1,19 @@
 import type { AuthenticatedUser } from '@app/auth';
 import { CurrentUser } from '@app/auth';
 import { Permission } from '@app/permission';
-import { Body, Controller, Delete, Get, Inject, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Inject, Param, Post, Put } from '@nestjs/common';
 import { ApiBearerAuth } from '@nestjs/swagger';
 import { DeptService } from './dept.service.js';
 import { CreateDeptDto, DeptResponseDto, DeptTreeDto, UpdateDeptDto } from './dto/dept.dto.js';
 
 /** 系统部门管理。 */
-@Controller('system/depts')
+@Controller('system/dept')
 @ApiBearerAuth()
 export class DeptController {
   constructor(@Inject(DeptService) private readonly service: DeptService) {}
 
   /** 查询未删除的部门树，包含停用节点。 */
-  @Get()
+  @Get('list')
   @Permission('system:dept:list')
   findAll(@CurrentUser() actor: AuthenticatedUser): Promise<DeptTreeDto[]> {
     return this.service.findAll(actor);
@@ -40,7 +40,7 @@ export class DeptController {
   }
 
   /** 更新部门，移动时在同一事务重算所有未删除后代路径。 */
-  @Patch(':id')
+  @Put(':id')
   @Permission('system:dept:edit')
   update(
     @Param('id') id: string,
