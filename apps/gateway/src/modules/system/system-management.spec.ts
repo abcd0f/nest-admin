@@ -236,34 +236,9 @@ describe('分页与响应 DTO', () => {
 });
 
 describe('直接参数与字段校验', () => {
-  it.each(['0', '-1', '01', '1e3', ' 1', '1.0', '9223372036854775808'])(
-    '四类资源在查询前拒绝非法路径 ID %s',
-    async (id) => {
-      const prisma = {
-        user: { findFirst: vi.fn() },
-        role: { findFirst: vi.fn() },
-        menu: { findUnique: vi.fn() },
-        dept: { findFirst: vi.fn() },
-      };
-      const userService = new UserService(prisma as never, {} as never, auth as never);
-      const roleService = new RoleService(
-        prisma as never,
-        auth as never,
-        menuService as never,
-        deptService as never,
-      );
-      const menuServiceUnderTest = new MenuService(prisma as never, auth as never);
-      const deptServiceUnderTest = new DeptService(prisma as never);
-      await expect(userService.findOne(id, actor)).rejects.toMatchObject({ status: 422 });
-      await expect(roleService.findOne(id)).rejects.toMatchObject({ status: 422 });
-      await expect(menuServiceUnderTest.findOne(id)).rejects.toMatchObject({ status: 422 });
-      await expect(deptServiceUnderTest.findOne(id, actor)).rejects.toMatchObject({ status: 422 });
-      expect(prisma.user.findFirst).not.toHaveBeenCalled();
-      expect(prisma.role.findFirst).not.toHaveBeenCalled();
-      expect(prisma.menu.findUnique).not.toHaveBeenCalled();
-      expect(prisma.dept.findFirst).not.toHaveBeenCalled();
-    },
-  );
+  // 路径 ID 的格式校验已统一收敛到 core 的全局 `BigIntIdPipe`（见
+  // libs/core/src/pipes/bigint-id.pipe.spec.ts 与 test/rbac.e2e-spec.ts 的端到端用例），
+  // 服务层只接收管道转换好的 bigint，不再重复校验。
 
   it('各资源详情自行判断不存在，BigInt 上限字符串不经过 Number', async () => {
     const prisma = {
@@ -274,7 +249,7 @@ describe('直接参数与字段校验', () => {
     };
     await expect(
       new UserService(prisma as never, {} as never, auth as never).findOne(
-        '9223372036854775807',
+        9223372036854775807n,
         actor,
       ),
     ).rejects.toMatchObject({ status: 404 });
@@ -284,13 +259,13 @@ describe('直接参数与字段校验', () => {
         auth as never,
         menuService as never,
         deptService as never,
-      ).findOne('9223372036854775807'),
+      ).findOne(9223372036854775807n),
     ).rejects.toMatchObject({ status: 404 });
     await expect(
-      new MenuService(prisma as never, auth as never).findOne('9223372036854775807'),
+      new MenuService(prisma as never, auth as never).findOne(9223372036854775807n),
     ).rejects.toMatchObject({ status: 404 });
     await expect(
-      new DeptService(prisma as never).findOne('9223372036854775807', actor),
+      new DeptService(prisma as never).findOne(9223372036854775807n, actor),
     ).rejects.toMatchObject({ status: 404 });
     expect(prisma.user.findFirst.mock.lastCall?.[0].where.userId).toBe(9223372036854775807n);
   });
@@ -331,7 +306,7 @@ describe('权限变更后的会话失效', () => {
     };
     auth.revokeUserSessions.mockClear();
     const service = new RoleService(prisma as never, auth as never, menuService as never, deptService as never);
-    await expect(service.assignMenus('2', { menuIds: [] }, actor)).resolves.toMatchObject({
+    await expect(service.assignMenus(2n, { menuIds: [] }, actor)).resolves.toMatchObject({
       roleId: '2',
     });
     expect(tx.roleMenu.deleteMany).toHaveBeenCalledOnce();
@@ -353,7 +328,7 @@ describe('权限变更后的会话失效', () => {
     );
     auth.revokeUserSessions.mockClear();
     const service = new UserService({ $transaction } as never, {} as never, auth as never);
-    await expect(service.update('8', { status: '1' }, actor)).resolves.toMatchObject({
+    await expect(service.update(8n, { status: '1' }, actor)).resolves.toMatchObject({
       userId: '8',
     });
     expect(tx.user.update).toHaveBeenCalledOnce();
@@ -453,7 +428,7 @@ describe('用户管理服务', () => {
       userRole: { deleteMany: vi.fn(), createMany: vi.fn() },
     };
     const service = new UserService({ $transaction: transaction(tx) } as never, {} as never, auth as never);
-    await service.assignRoles('2', { roleIds: ['2', '2', '3'] }, actor);
+    await service.assignRoles(2n, { roleIds: ['2', '2', '3'] }, actor);
     expect(tx.userRole.deleteMany).toHaveBeenCalledOnce();
     expect(tx.userRole.createMany.mock.lastCall?.[0].data).toEqual([
       { userId: 2n, roleId: 2n },
@@ -461,7 +436,7 @@ describe('用户管理服务', () => {
     ]);
     tx.role.findMany.mockResolvedValue([{ roleId: 2n }]);
     tx.userRole.deleteMany.mockClear();
-    await expect(service.assignRoles('2', { roleIds: ['2', '3'] }, actor)).rejects.toMatchObject({
+    await expect(service.assignRoles(2n, { roleIds: ['2', '3'] }, actor)).rejects.toMatchObject({
       status: 422,
     });
     expect(tx.userRole.deleteMany).not.toHaveBeenCalled();
@@ -478,13 +453,13 @@ describe('用户管理服务', () => {
     };
     const prisma = { $transaction: transaction(tx) };
     const service = new UserService(prisma as never, {} as never, auth as never);
-    await expect(service.update('1', { nickName: 'x' }, actor)).rejects.toThrow(
+    await expect(service.update(1n, { nickName: 'x' }, actor)).rejects.toThrow(
       '不允许操作超级管理员用户',
     );
-    await expect(service.assignRoles('1', { roleIds: [] }, actor)).rejects.toThrow(
+    await expect(service.assignRoles(1n, { roleIds: [] }, actor)).rejects.toThrow(
       '不允许操作超级管理员用户',
     );
-    await expect(service.remove('1', actor)).rejects.toThrow('不允许操作超级管理员用户');
+    await expect(service.remove(1n, actor)).rejects.toThrow('不允许操作超级管理员用户');
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(tx.user.update).not.toHaveBeenCalled();
   });
@@ -502,11 +477,11 @@ describe('用户管理服务', () => {
       userRole: { deleteMany: vi.fn() },
     };
     const service = new UserService({ $transaction: transaction(tx) } as never, {} as never, auth as never);
-    await expect(service.update('7', { status: '1' }, actor)).rejects.toThrow('不能停用当前用户');
-    await expect(service.remove('7', actor)).rejects.toThrow('不能删除当前用户');
+    await expect(service.update(7n, { status: '1' }, actor)).rejects.toThrow('不能停用当前用户');
+    await expect(service.remove(7n, actor)).rejects.toThrow('不能删除当前用户');
     tx.user.findFirst.mockResolvedValue({ userId: 8n });
     tx.dept.count.mockResolvedValue(1);
-    await expect(service.remove('8', actor)).rejects.toThrow('用户仍是部门负责人');
+    await expect(service.remove(8n, actor)).rejects.toThrow('用户仍是部门负责人');
     expect(tx.user.update).not.toHaveBeenCalled();
   });
 });
@@ -524,12 +499,12 @@ describe('角色和菜单管理服务', () => {
     const prisma = { $transaction: transaction(tx) };
     const service = new RoleService(prisma as never, auth as never, menuService as never, deptService as never);
     expect(
-      (await service.dataScope('2', { dataScope: '2', deptIds: ['5'] }, actor)).deptIds,
+      (await service.dataScope(2n, { dataScope: '2', deptIds: ['5'] }, actor)).deptIds,
     ).toEqual(['5']);
     expect(tx.roleDept.createMany.mock.lastCall?.[0].data).toEqual([{ roleId: 2n, deptId: 5n }]);
     tx.roleDept.deleteMany.mockClear();
     await expect(
-      service.dataScope('2', { dataScope: '5', deptIds: ['5'] }, actor),
+      service.dataScope(2n, { dataScope: '5', deptIds: ['5'] }, actor),
     ).rejects.toMatchObject({ status: 422 });
     expect(tx.roleDept.deleteMany).not.toHaveBeenCalled();
   });
@@ -550,7 +525,7 @@ describe('角色和菜单管理服务', () => {
       menuService as never,
       deptService as never,
     );
-    await expect(service.assignMenus('2', { menuIds: ['4', '5'] }, actor)).rejects.toMatchObject({
+    await expect(service.assignMenus(2n, { menuIds: ['4', '5'] }, actor)).rejects.toMatchObject({
       status: 422,
     });
     expect(tx.roleMenu.deleteMany).not.toHaveBeenCalled();
@@ -574,7 +549,7 @@ describe('角色和菜单管理服务', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
     // 原标识已是保留标识时，改成任何新值都不允许。
     for (const roleKey of ['admin', 'operator']) {
-      await expect(service.update('2', { roleKey }, actor)).rejects.toThrow(
+      await expect(service.update(2n, { roleKey }, actor)).rejects.toThrow(
         '不允许修改系统内置管理员角色标识符',
       );
     }
@@ -600,14 +575,14 @@ describe('角色和菜单管理服务', () => {
       menuService as never,
       deptService as never,
     );
-    expect(await service.menuTreeSelect('2')).toEqual({ checkedKeys: ['2', '3'], menus: [] });
-    expect(await service.deptTreeSelect('2')).toEqual({ checkedKeys: ['11'], depts: [] });
+    expect(await service.menuTreeSelect(2n)).toEqual({ checkedKeys: ['2', '3'], menus: [] });
+    expect(await service.deptTreeSelect(2n, actor)).toEqual({ checkedKeys: ['11'], depts: [] });
 
     prisma.role.findFirst.mockResolvedValue({ menuCheckStrictly: false, deptCheckStrictly: false });
     prisma.menu.findMany.mockClear();
     prisma.dept.findMany.mockClear();
-    expect(await service.menuTreeSelect('2')).toEqual({ checkedKeys: ['1', '2', '3'], menus: [] });
-    expect(await service.deptTreeSelect('2')).toEqual({ checkedKeys: ['10', '11'], depts: [] });
+    expect(await service.menuTreeSelect(2n)).toEqual({ checkedKeys: ['1', '2', '3'], menus: [] });
+    expect(await service.deptTreeSelect(2n, actor)).toEqual({ checkedKeys: ['10', '11'], depts: [] });
     // 不裁剪时不应再查父节点。
     expect(prisma.menu.findMany).not.toHaveBeenCalled();
     expect(prisma.dept.findMany).not.toHaveBeenCalled();
@@ -627,15 +602,15 @@ describe('角色和菜单管理服务', () => {
       menuService as never,
       deptService as never,
     );
-    await expect(service.menuTreeSelect('2')).rejects.toMatchObject({ status: 404 });
-    await expect(service.deptTreeSelect('2')).rejects.toMatchObject({ status: 404 });
+    await expect(service.menuTreeSelect(2n)).rejects.toMatchObject({ status: 404 });
+    await expect(service.deptTreeSelect(2n, actor)).rejects.toMatchObject({ status: 404 });
     expect(prisma.roleMenu.findMany).not.toHaveBeenCalled();
 
     prisma.role.findFirst.mockResolvedValue({ menuCheckStrictly: true, deptCheckStrictly: true });
     prisma.roleMenu.findMany.mockResolvedValue([]);
     prisma.roleDept.findMany.mockResolvedValue([]);
-    expect(await service.menuTreeSelect('2')).toEqual({ checkedKeys: [], menus: [] });
-    expect(await service.deptTreeSelect('2')).toEqual({ checkedKeys: [], depts: [] });
+    expect(await service.menuTreeSelect(2n)).toEqual({ checkedKeys: [], menus: [] });
+    expect(await service.deptTreeSelect(2n, actor)).toEqual({ checkedKeys: [], depts: [] });
     expect(prisma.menu.findMany).not.toHaveBeenCalled();
   });
 
@@ -665,7 +640,7 @@ describe('角色和菜单管理服务', () => {
       menuCheckStrictly: false,
       deptCheckStrictly: false,
     });
-    await service.update('2', { menuCheckStrictly: true }, actor);
+    await service.update(2n, { menuCheckStrictly: true }, actor);
     expect(tx.role.update.mock.lastCall?.[0].data).toMatchObject({
       menuCheckStrictly: true,
       deptCheckStrictly: undefined,
@@ -690,7 +665,7 @@ describe('角色和菜单管理服务', () => {
     await expect(
       service.create({ parentId: '1', menuName: 'button', menuType: 'F', perms: 'save' }, actor),
     ).rejects.toMatchObject({ status: 422 });
-    await expect(service.remove('2')).rejects.toThrow(ConflictException);
+    await expect(service.remove(2n)).rejects.toThrow(ConflictException);
     expect(tx.menu.delete).not.toHaveBeenCalled();
   });
 });
@@ -716,7 +691,7 @@ describe('部门树维护', () => {
     };
     const prisma = { $transaction: transaction(tx) };
     const service = new DeptService(prisma as never);
-    const response = await service.update('1', { parentId: '3' }, actor);
+    const response = await service.update(1n, { parentId: '3' }, actor);
     expect(response.ancestors).toBe('/3/1/');
     expect(
       tx.dept.update.mock.calls.map(([args]) => [args.where.deptId, args.data.ancestors]),
@@ -742,9 +717,9 @@ describe('部门树维护', () => {
       roleDept: { count: vi.fn().mockResolvedValue(0) },
     };
     const service = new DeptService({ $transaction: transaction(tx) } as never);
-    await expect(service.update('1', { parentId: '2' }, actor)).rejects.toThrow(ConflictException);
+    await expect(service.update(1n, { parentId: '2' }, actor)).rejects.toThrow(ConflictException);
     expect(tx.dept.update).not.toHaveBeenCalled();
-    await expect(service.remove('1', actor)).rejects.toThrow('部门仍被用户引用');
+    await expect(service.remove(1n, actor)).rejects.toThrow('部门仍被用户引用');
     expect(tx.dept.update).not.toHaveBeenCalled();
   });
 });
@@ -779,7 +754,7 @@ describe('数据范围落地到管理查询', () => {
   it('范围外用户按不存在处理，不会泄露存在性', async () => {
     const prisma = { user: { findFirst: vi.fn().mockResolvedValue(null) } };
     await expect(
-      new UserService(prisma as never, {} as never, auth as never).findOne('9', scoped),
+      new UserService(prisma as never, {} as never, auth as never).findOne(9n, scoped),
     ).rejects.toMatchObject({ status: 404 });
     expect(prisma.user.findFirst.mock.lastCall?.[0].where).toEqual({
       AND: [{ userId: 9n, delFlag: '0' }, { deptId: { in: [3n] } }],
@@ -816,13 +791,13 @@ describe('数据范围落地到管理查询', () => {
     const prisma = { user: { findFirst: vi.fn() }, dept: { findFirst: vi.fn() } };
     await expect(
       new UserService(prisma as never, {} as never, auth as never).update(
-        '9',
+        9n,
         { deptId: '8' },
         scoped,
       ),
     ).rejects.toMatchObject({ status: 403 });
     await expect(
-      new DeptService(prisma as never).update('9', { parentId: '8' }, scoped),
+      new DeptService(prisma as never).update(9n, { parentId: '8' }, scoped),
     ).rejects.toMatchObject({ status: 403 });
     expect(prisma.user.findFirst).not.toHaveBeenCalled();
     expect(prisma.dept.findFirst).not.toHaveBeenCalled();
@@ -884,10 +859,10 @@ describe('岗位管理与用户岗位分配', () => {
       userPost: { count: vi.fn().mockResolvedValue(2) },
     };
     const service = new PostService({ $transaction: transaction(tx) } as never);
-    await expect(service.update('5', { status: '1' }, actor)).rejects.toThrow(
+    await expect(service.update(5n, { status: '1' }, actor)).rejects.toThrow(
       '岗位已分配用户，不能停用',
     );
-    await expect(service.remove('5', actor)).rejects.toThrow('岗位已分配用户，不能删除');
+    await expect(service.remove(5n, actor)).rejects.toThrow('岗位已分配用户，不能删除');
     expect(tx.post.update).not.toHaveBeenCalled();
   });
 
@@ -899,7 +874,7 @@ describe('岗位管理与用户岗位分配', () => {
       },
       userPost: { count: vi.fn().mockResolvedValue(0) },
     };
-    await new PostService({ $transaction: transaction(tx) } as never).remove('5', actor);
+    await new PostService({ $transaction: transaction(tx) } as never).remove(5n, actor);
     expect(tx.post.update.mock.lastCall?.[0].data).toMatchObject({ delFlag: '2', updateBy: 7n });
   });
 

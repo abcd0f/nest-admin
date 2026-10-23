@@ -1,8 +1,7 @@
 import type { AuthenticatedUser } from '@app/auth';
 import type { Prisma } from '@app/database/generated/prisma/client.js';
-import { isUserId } from '@app/auth';
 import { toDto, toDtoList, toPageDto } from '@app/common';
-import { BusinessException } from '@app/core';
+import { BusinessException, isBigIntId } from '@app/core';
 import { paginate, PrismaService } from '@app/database';
 import { isDeptInScope, loadDataScope, withDataScope } from '@app/permission';
 import {
@@ -48,7 +47,7 @@ export class PostService {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   async findAll(query: PostQueryDto, actor: AuthenticatedUser) {
-    if (query.deptId !== undefined && !isUserId(query.deptId)) {
+    if (query.deptId !== undefined && !isBigIntId(query.deptId)) {
       throw BusinessException.validation([{ field: 'deptId', messages: ['部门 ID 无效'] }]);
     }
     const where = withDataScope<Prisma.PostWhereInput>(
@@ -65,13 +64,11 @@ export class PostService {
     return toPageDto(PostResponseDto, await paginate(this.prisma.post, { ...query, where }));
   }
 
-  async findOne(id: string, actor: AuthenticatedUser) {
-    if (!isUserId(id))
-      throw BusinessException.validation([{ field: 'id', messages: ['岗位 ID 无效'] }]);
+  async findOne(id: bigint, actor: AuthenticatedUser) {
     const row = await this.prisma.post.findFirst({
       // 范围外按"不存在"处理，不泄露岗位是否存在。
       where: withDataScope(
-        { postId: BigInt(id), delFlag: '0' },
+        { postId: id, delFlag: '0' },
         await loadDataScope(this.prisma, actor),
         POST_SCOPE_COLUMNS,
       ),
@@ -83,7 +80,7 @@ export class PostService {
 
   /** 岗位下拉：只返回启用且未删除的岗位，可限定部门。 */
   async options(deptId: string | undefined, actor: AuthenticatedUser): Promise<PostOptionDto[]> {
-    if (deptId !== undefined && !isUserId(deptId)) {
+    if (deptId !== undefined && !isBigIntId(deptId)) {
       throw BusinessException.validation([{ field: 'deptId', messages: ['部门 ID 无效'] }]);
     }
     const rows = await this.prisma.post.findMany({
@@ -103,7 +100,7 @@ export class PostService {
   }
 
   async create(body: CreatePostDto, actor: AuthenticatedUser) {
-    if (body.deptId !== undefined && !isUserId(body.deptId))
+    if (body.deptId !== undefined && !isBigIntId(body.deptId))
       throw BusinessException.validation([{ field: 'deptId', messages: ['部门 ID 无效'] }]);
     // 表单不带部门时落到当前用户部门：前端岗位表单没有部门字段，左侧部门树只做筛选。
     const target = body.deptId ?? actor.deptId;
@@ -144,12 +141,10 @@ export class PostService {
     return toDto(PostResponseDto, row)!;
   }
 
-  async update(id: string, body: UpdatePostDto, actor: AuthenticatedUser) {
-    if (!isUserId(id))
-      throw BusinessException.validation([{ field: 'id', messages: ['岗位 ID 无效'] }]);
-    if (body.deptId !== undefined && !isUserId(body.deptId))
+  async update(id: bigint, body: UpdatePostDto, actor: AuthenticatedUser) {
+    if (body.deptId !== undefined && !isBigIntId(body.deptId))
       throw BusinessException.validation([{ field: 'deptId', messages: ['部门 ID 无效'] }]);
-    const postId = BigInt(id);
+    const postId = id;
     const scope = await loadDataScope(this.prisma, actor);
     if (body.deptId !== undefined && !isDeptInScope(scope, body.deptId)) {
       throw new ForbiddenException('无权把岗位移动到目标部门');
@@ -202,10 +197,8 @@ export class PostService {
     return toDto(PostResponseDto, row)!;
   }
 
-  async remove(id: string, actor: AuthenticatedUser): Promise<void> {
-    if (!isUserId(id))
-      throw BusinessException.validation([{ field: 'id', messages: ['岗位 ID 无效'] }]);
-    const postId = BigInt(id);
+  async remove(id: bigint, actor: AuthenticatedUser): Promise<void> {
+    const postId = id;
     const scope = await loadDataScope(this.prisma, actor);
     await this.prisma.$transaction(
       async (tx) => {

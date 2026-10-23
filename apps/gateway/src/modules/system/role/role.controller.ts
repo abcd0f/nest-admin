@@ -32,7 +32,7 @@ export class RoleController {
   /** 查询角色及菜单、部门关联。 */
   @Get(':id')
   @Permission('system:role:query')
-  findOne(@Param('id') id: string): Promise<RoleResponseDto> {
+  findOne(@Param('id') id: bigint): Promise<RoleResponseDto> {
     return this.service.findOne(id);
   }
 
@@ -44,7 +44,7 @@ export class RoleController {
    */
   @Get('menuTree/:id')
   @Permission('system:role:query')
-  menuTree(@Param('id') id: string): Promise<RoleMenuTreeDto> {
+  menuTree(@Param('id') id: bigint): Promise<RoleMenuTreeDto> {
     return this.service.menuTreeSelect(id);
   }
 
@@ -52,7 +52,7 @@ export class RoleController {
   @Get('deptTree/:id')
   @Permission('system:role:query')
   deptTree(
-    @Param('id') id: string,
+    @Param('id') id: bigint,
     @CurrentUser() actor: AuthenticatedUser,
   ): Promise<RoleDeptTreeDto> {
     return this.service.deptTreeSelect(id, actor);
@@ -72,7 +72,7 @@ export class RoleController {
   @Put(':id')
   @Permission('system:role:edit')
   update(
-    @Param('id') id: string,
+    @Param('id') id: bigint,
     @Body() body: UpdateRoleDto,
     @CurrentUser() actor: AuthenticatedUser,
   ): Promise<RoleResponseDto> {
@@ -83,7 +83,7 @@ export class RoleController {
   @Put('menus/:id')
   @Permission('system:role:assignMenus')
   assignMenus(
-    @Param('id') id: string,
+    @Param('id') id: bigint,
     @Body() body: AssignRoleMenusDto,
     @CurrentUser() actor: AuthenticatedUser,
   ): Promise<RoleResponseDto> {
@@ -94,7 +94,7 @@ export class RoleController {
   @Put('dataScope/:id')
   @Permission('system:role:dataScope')
   dataScope(
-    @Param('id') id: string,
+    @Param('id') id: bigint,
     @Body() body: RoleDataScopeDto,
     @CurrentUser() actor: AuthenticatedUser,
   ): Promise<RoleResponseDto> {
@@ -104,7 +104,7 @@ export class RoleController {
   /** 逻辑删除无用户引用的角色，同时清理菜单和部门关联。 */
   @Delete(':id')
   @Permission('system:role:delete')
-  remove(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser): Promise<void> {
+  remove(@Param('id') id: bigint, @CurrentUser() actor: AuthenticatedUser): Promise<void> {
     return this.service.remove(id, actor);
   }
 }

@@ -1,4 +1,5 @@
 import type { RedisClientType } from 'redis';
+import { REDIS_GLOB_SPECIAL_CHARS_PATTERN } from '@app/common/constants/regex.js';
 
 export function assertKey(key: string): void {
   if (typeof key !== 'string' || key.trim().length === 0) throw new TypeError('Redis key 必须是非空字符串');
@@ -13,7 +14,7 @@ export function assertTtl(ttl: number, allowZero = true): void {
 /** prefix 按字面量处理；逐批 SCAN + UNLINK，不阻塞 Redis，也不积攒删除任务。 */
 export async function deleteByPrefix(client: Pick<RedisClientType, 'scan' | 'unlink'>, prefix: string): Promise<number> {
   assertKey(prefix);
-  const match = `${prefix.replace(/[\\*?[\]]/g, '\\$&')}*`;
+  const match = `${prefix.replace(REDIS_GLOB_SPECIAL_CHARS_PATTERN, '\\$&')}*`;
   let cursor = '0';
   let deleted = 0;
   do {

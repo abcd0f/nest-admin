@@ -22,7 +22,7 @@ export class MenuController {
   /** 查询菜单或按钮。 */
   @Get(':id')
   @Permission('system:menu:query')
-  findOne(@Param('id') id: string): Promise<MenuResponseDto> {
+  findOne(@Param('id') id: bigint): Promise<MenuResponseDto> {
     return this.service.findOne(id);
   }
 
@@ -40,7 +40,7 @@ export class MenuController {
   @Put(':id')
   @Permission('system:menu:edit')
   update(
-    @Param('id') id: string,
+    @Param('id') id: bigint,
     @Body() body: UpdateMenuDto,
     @CurrentUser() actor: AuthenticatedUser,
   ): Promise<MenuResponseDto> {
@@ -50,7 +50,7 @@ export class MenuController {
   /** 物理删除无子节点、无角色引用的菜单；Menu 没有逻辑删除字段。 */
   @Delete(':id')
   @Permission('system:menu:delete')
-  remove(@Param('id') id: string): Promise<void> {
+  remove(@Param('id') id: bigint): Promise<void> {
     return this.service.remove(id);
   }
 }

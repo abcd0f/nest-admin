@@ -1,8 +1,8 @@
 import type { AuthenticatedUser } from '@app/auth';
 import type { Prisma } from '@app/database/generated/prisma/client.js';
-import { AuthService, isUserId } from '@app/auth';
+import { AuthService } from '@app/auth';
 import { toDto, toDtoList, toTree } from '@app/common';
-import { BusinessException } from '@app/core';
+import { BusinessException, isBigIntId } from '@app/core';
 import { PrismaService } from '@app/database';
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { revokeSessions, usersOfMenu } from '../session-invalidation.js';
@@ -71,11 +71,9 @@ export class MenuService {
     }
   }
 
-  async findOne(id: string) {
-    if (!isUserId(id))
-      throw BusinessException.validation([{ field: 'id', messages: ['菜单 ID 无效'] }]);
+  async findOne(id: bigint) {
     const row = await this.prisma.menu.findUnique({
-      where: { menuId: BigInt(id) },
+      where: { menuId: id },
       select: menuSelect,
     });
     if (!row) throw new NotFoundException('菜单不存在');
@@ -83,7 +81,7 @@ export class MenuService {
   }
 
   async create(body: CreateMenuDto, actor: AuthenticatedUser) {
-    if (body.parentId !== undefined && body.parentId !== '0' && !isUserId(body.parentId)) {
+    if (body.parentId !== undefined && body.parentId !== '0' && !isBigIntId(body.parentId)) {
       throw BusinessException.validation([{ field: 'parentId', messages: ['父菜单 ID 无效'] }]);
     }
     const row = await this.prisma.$transaction(
@@ -121,13 +119,11 @@ export class MenuService {
     return toDto(MenuResponseDto, row)!;
   }
 
-  async update(id: string, body: UpdateMenuDto, actor: AuthenticatedUser) {
-    if (!isUserId(id))
-      throw BusinessException.validation([{ field: 'id', messages: ['菜单 ID 无效'] }]);
-    if (body.parentId !== undefined && body.parentId !== '0' && !isUserId(body.parentId)) {
+  async update(id: bigint, body: UpdateMenuDto, actor: AuthenticatedUser) {
+    if (body.parentId !== undefined && body.parentId !== '0' && !isBigIntId(body.parentId)) {
       throw BusinessException.validation([{ field: 'parentId', messages: ['父菜单 ID 无效'] }]);
     }
-    const menuId = BigInt(id);
+    const menuId = id;
     const row = await this.prisma.$transaction(
       async (tx) => {
         const current = await tx.menu.findUnique({ where: { menuId }, select: menuSelect });
@@ -176,10 +172,8 @@ export class MenuService {
     return toDto(MenuResponseDto, row)!;
   }
 
-  async remove(id: string): Promise<void> {
-    if (!isUserId(id))
-      throw BusinessException.validation([{ field: 'id', messages: ['菜单 ID 无效'] }]);
-    const menuId = BigInt(id);
+  async remove(id: bigint): Promise<void> {
+    const menuId = id;
     await this.prisma.$transaction(
       async (tx) => {
         const menu = await tx.menu.findUnique({ where: { menuId }, select: { menuId: true } });

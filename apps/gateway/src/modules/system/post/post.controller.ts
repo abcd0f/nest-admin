@@ -44,7 +44,7 @@ export class PostController {
   @Get(':id')
   @Permission('system:post:query')
   findOne(
-    @Param('id') id: string,
+    @Param('id') id: bigint,
     @CurrentUser() actor: AuthenticatedUser,
   ): Promise<PostResponseDto> {
     return this.service.findOne(id, actor);
@@ -64,7 +64,7 @@ export class PostController {
   @Put(':id')
   @Permission('system:post:edit')
   update(
-    @Param('id') id: string,
+    @Param('id') id: bigint,
     @Body() body: UpdatePostDto,
     @CurrentUser() actor: AuthenticatedUser,
   ): Promise<PostResponseDto> {
@@ -74,7 +74,7 @@ export class PostController {
   /** 逻辑删除岗位；已分配用户的岗位不能删除。 */
   @Delete(':id')
   @Permission('system:post:delete')
-  remove(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser): Promise<void> {
+  remove(@Param('id') id: bigint, @CurrentUser() actor: AuthenticatedUser): Promise<void> {
     return this.service.remove(id, actor);
   }
 }

@@ -1,8 +1,8 @@
 import type { AuthenticatedUser } from '@app/auth';
 import type { Prisma } from '@app/database/generated/prisma/client.js';
-import { AuthService, isUserId } from '@app/auth';
+import { AuthService } from '@app/auth';
 import { toDto, toPageDto } from '@app/common';
-import { BusinessException } from '@app/core';
+import { BusinessException, isBigIntId } from '@app/core';
 import { PasswordHashService } from '@app/crypto';
 import { paginate, PrismaService } from '@app/database';
 import { isDeptInScope, loadDataScope, withDataScope } from '@app/permission';
@@ -51,7 +51,7 @@ export class UserService {
   ) {}
 
   async findAll(query: UserQueryDto, actor: AuthenticatedUser) {
-    if (query.deptId !== undefined && !isUserId(query.deptId)) {
+    if (query.deptId !== undefined && !isBigIntId(query.deptId)) {
       throw BusinessException.validation([{ field: 'deptId', messages: ['部门 ID 无效'] }]);
     }
     // 数据范围按角色 dataScope 收敛到可见部门/本人，再叠加用户自己传的筛选条件。
@@ -89,13 +89,11 @@ export class UserService {
     });
   }
 
-  async findOne(id: string, actor: AuthenticatedUser) {
-    if (!isUserId(id))
-      throw BusinessException.validation([{ field: 'id', messages: ['用户 ID 无效'] }]);
+  async findOne(id: bigint, actor: AuthenticatedUser) {
     const row = await this.prisma.user.findFirst({
       // 越权访问按"不存在"处理，不区分"没有这条"和"看不到这条"。
       where: withDataScope(
-        { userId: BigInt(id), delFlag: '0' },
+        { userId: id, delFlag: '0' },
         await loadDataScope(this.prisma, actor),
         USER_SCOPE_COLUMNS,
       ),
@@ -110,7 +108,7 @@ export class UserService {
   }
 
   async create(body: CreateUserDto, actor: AuthenticatedUser) {
-    if (body.deptId != null && !isUserId(body.deptId)) {
+    if (body.deptId != null && !isBigIntId(body.deptId)) {
       throw BusinessException.validation([{ field: 'deptId', messages: ['部门 ID 无效'] }]);
     }
     // 不能把用户建在自己看不到的部门里，否则这条记录从此既不可见也不可维护。
@@ -165,14 +163,12 @@ export class UserService {
     })!;
   }
 
-  async update(id: string, body: UpdateUserDto, actor: AuthenticatedUser) {
-    if (!isUserId(id))
-      throw BusinessException.validation([{ field: 'id', messages: ['用户 ID 无效'] }]);
+  async update(id: bigint, body: UpdateUserDto, actor: AuthenticatedUser) {
     assertNotSuperAdmin(id);
-    if (body.deptId != null && !isUserId(body.deptId)) {
+    if (body.deptId != null && !isBigIntId(body.deptId)) {
       throw BusinessException.validation([{ field: 'deptId', messages: ['部门 ID 无效'] }]);
     }
-    const userId = BigInt(id);
+    const userId = id;
     const scope = await loadDataScope(this.prisma, actor);
     // 移动部门同样要落在范围内，否则可以把用户推到看不见的部门里。
     if (body.deptId !== undefined && !isDeptInScope(scope, body.deptId)) {
@@ -187,7 +183,7 @@ export class UserService {
           select: { userId: true, status: true },
         });
         if (!current) throw new NotFoundException('用户不存在');
-        if (id === actor.userId && body.status === '1')
+        if (userId === BigInt(actor.userId) && body.status === '1')
           throw new ConflictException('不能停用当前用户');
         if (
           body.userName !== undefined &&
@@ -244,14 +240,12 @@ export class UserService {
     })!;
   }
 
-  async assignRoles(id: string, body: AssignUserRolesDto, actor: AuthenticatedUser) {
-    if (!isUserId(id))
-      throw BusinessException.validation([{ field: 'id', messages: ['用户 ID 无效'] }]);
+  async assignRoles(id: bigint, body: AssignUserRolesDto, actor: AuthenticatedUser) {
     assertNotSuperAdmin(id);
-    if (body.roleIds.some((roleId) => !isUserId(roleId))) {
+    if (body.roleIds.some((roleId) => !isBigIntId(roleId))) {
       throw BusinessException.validation([{ field: 'roleIds', messages: ['角色 ID 无效'] }]);
     }
-    const userId = BigInt(id);
+    const userId = id;
     const scope = await loadDataScope(this.prisma, actor);
     const row = await this.prisma.$transaction(
       async (tx) => {
@@ -290,11 +284,9 @@ export class UserService {
     })!;
   }
 
-  async remove(id: string, actor: AuthenticatedUser): Promise<void> {
-    if (!isUserId(id))
-      throw BusinessException.validation([{ field: 'id', messages: ['用户 ID 无效'] }]);
+  async remove(id: bigint, actor: AuthenticatedUser): Promise<void> {
     assertNotSuperAdmin(id);
-    const userId = BigInt(id);
+    const userId = id;
     const scope = await loadDataScope(this.prisma, actor);
     await this.prisma.$transaction(
       async (tx) => {
@@ -303,7 +295,7 @@ export class UserService {
           select: { userId: true },
         });
         if (!user) throw new NotFoundException('用户不存在');
-        if (id === actor.userId) throw new ConflictException('不能删除当前用户');
+        if (userId === BigInt(actor.userId)) throw new ConflictException('不能删除当前用户');
         if (await tx.dept.count({ where: { leaderId: userId, delFlag: '0' } })) {
           throw new ConflictException('用户仍是部门负责人，请先更换负责人');
         }

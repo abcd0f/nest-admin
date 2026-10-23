@@ -1,4 +1,4 @@
-import { isUserId } from '@app/auth';
+import { isBigIntId } from '@app/core/validators/bigint-id.js';
 import { PrismaService } from '@app/database';
 import {
   Inject,
@@ -30,7 +30,7 @@ export class PrismaPermissionSource extends PermissionSource {
   }
 
   async getAuthorization(userId: string): Promise<UserAuthorization> {
-    if (!isUserId(userId)) throw new UnauthorizedException('未认证');
+    if (!isBigIntId(userId)) throw new UnauthorizedException('未认证');
     let user;
     try {
       user = await this.prisma.user.findUnique({

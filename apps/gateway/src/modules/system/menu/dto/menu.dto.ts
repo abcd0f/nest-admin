@@ -1,3 +1,8 @@
+import {
+  CONTAINS_NON_WHITESPACE_PATTERN,
+  IDENTIFIER_WITHOUT_WILDCARD_PATTERN,
+  PARENT_ID_PATTERN,
+} from '@app/common';
 import { DateFormat } from '@app/core';
 import { ApiProperty, PartialType } from '@nestjs/swagger';
 import { Exclude, Expose, Type } from 'class-transformer';
@@ -17,14 +22,14 @@ export class CreateMenuDto {
   /** 父菜单 ID，缺省 "0"。M/C 仅可挂在 M 下；F 必须挂在 C 下。 */
   @ValidateIf((_object, value) => value !== undefined)
   @IsString()
-  @Matches(/^(0|[1-9]\d{0,18})$/)
+  @Matches(PARENT_ID_PATTERN)
   @MaxLength(19)
   @Type(() => String)
   parentId?: string;
 
   /** 菜单名称。 */
   @IsString()
-  @Matches(/\S/)
+  @Matches(CONTAINS_NON_WHITESPACE_PATTERN)
   @MaxLength(64)
   menuName!: string;
 
@@ -80,7 +85,7 @@ export class CreateMenuDto {
   /** 精确操作权限码。F 必填，M 必须为空；不支持通配符。null 清空。 */
   @IsOptional()
   @IsString()
-  @Matches(/^[^\s*]+$/)
+  @Matches(IDENTIFIER_WITHOUT_WILDCARD_PATTERN)
   @MaxLength(100)
   perms?: string | null;
 

@@ -1,8 +1,8 @@
 import type { AuthenticatedUser } from '@app/auth';
 import type { Prisma } from '@app/database/generated/prisma/client.js';
-import { AuthService, isUserId } from '@app/auth';
+import { AuthService } from '@app/auth';
 import { toDto, toPageDto } from '@app/common';
-import { BusinessException } from '@app/core';
+import { BusinessException, isBigIntId } from '@app/core';
 import { paginate, PrismaService } from '@app/database';
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { DeptService } from '../dept/dept.service.js';
@@ -76,11 +76,9 @@ export class RoleService {
     });
   }
 
-  async findOne(id: string) {
-    if (!isUserId(id))
-      throw BusinessException.validation([{ field: 'id', messages: ['角色 ID 无效'] }]);
+  async findOne(id: bigint) {
     const row = await this.prisma.role.findFirst({
-      where: { roleId: BigInt(id), delFlag: '0' },
+      where: { roleId: id, delFlag: '0' },
       select: roleSelect,
     });
     if (!row) throw new NotFoundException('角色不存在');
@@ -99,8 +97,8 @@ export class RoleService {
    * 前端树在非联动模式下只靠末级就能把父节点推导成半选；若父节点 ID 也在 `checkedKeys` 里，
    * 会被误渲染成全选，让人以为整棵子树都授权了。
    */
-  async menuTreeSelect(id: string): Promise<RoleMenuTreeDto> {
-    const roleId = this.requireRoleId(id);
+  async menuTreeSelect(id: bigint): Promise<RoleMenuTreeDto> {
+    const roleId = id;
     const role = await this.prisma.role.findFirst({
       where: { roleId, delFlag: '0' },
       select: { menuCheckStrictly: true },
@@ -124,8 +122,8 @@ export class RoleService {
    *
    * 对应 Java `SysDeptMapper.selectDeptListByRoleId`，裁剪规则与菜单一致。
    */
-  async deptTreeSelect(id: string, actor: AuthenticatedUser): Promise<RoleDeptTreeDto> {
-    const roleId = this.requireRoleId(id);
+  async deptTreeSelect(id: bigint, actor: AuthenticatedUser): Promise<RoleDeptTreeDto> {
+    const roleId = id;
     const role = await this.prisma.role.findFirst({
       where: { roleId, delFlag: '0' },
       select: { deptCheckStrictly: true },
@@ -143,12 +141,6 @@ export class RoleService {
       // 部门树同样受数据范围约束：看不到的部门不能被授予。
       depts: await this.depts.findAll(actor),
     };
-  }
-
-  private requireRoleId(id: string): bigint {
-    if (!isUserId(id))
-      throw BusinessException.validation([{ field: 'id', messages: ['角色 ID 无效'] }]);
-    return BigInt(id);
   }
 
   /** 剔除被其他已选菜单引用的父菜单；空集合直接返回，省一次查询。 */
@@ -198,10 +190,8 @@ export class RoleService {
     return toDto(RoleResponseDto, { ...row, menuIds: [], deptIds: [] })!;
   }
 
-  async update(id: string, body: UpdateRoleDto, actor: AuthenticatedUser) {
-    if (!isUserId(id))
-      throw BusinessException.validation([{ field: 'id', messages: ['角色 ID 无效'] }]);
-    const roleId = BigInt(id);
+  async update(id: bigint, body: UpdateRoleDto, actor: AuthenticatedUser) {
+    const roleId = id;
     const row = await this.prisma.$transaction(
       async (tx) => {
         const role = await tx.role.findFirst({
@@ -251,13 +241,11 @@ export class RoleService {
     })!;
   }
 
-  async assignMenus(id: string, body: AssignRoleMenusDto, actor: AuthenticatedUser) {
-    if (!isUserId(id))
-      throw BusinessException.validation([{ field: 'id', messages: ['角色 ID 无效'] }]);
-    if (body.menuIds.some((menuId) => !isUserId(menuId))) {
+  async assignMenus(id: bigint, body: AssignRoleMenusDto, actor: AuthenticatedUser) {
+    if (body.menuIds.some((menuId) => !isBigIntId(menuId))) {
       throw BusinessException.validation([{ field: 'menuIds', messages: ['菜单 ID 无效'] }]);
     }
-    const roleId = BigInt(id);
+    const roleId = id;
     const row = await this.prisma.$transaction(
       async (tx) => {
         const role = await tx.role.findFirst({
@@ -295,13 +283,11 @@ export class RoleService {
     })!;
   }
 
-  async dataScope(id: string, body: RoleDataScopeDto, actor: AuthenticatedUser) {
-    if (!isUserId(id))
-      throw BusinessException.validation([{ field: 'id', messages: ['角色 ID 无效'] }]);
-    if (body.deptIds?.some((deptId) => !isUserId(deptId))) {
+  async dataScope(id: bigint, body: RoleDataScopeDto, actor: AuthenticatedUser) {
+    if (body.deptIds?.some((deptId) => !isBigIntId(deptId))) {
       throw BusinessException.validation([{ field: 'deptIds', messages: ['部门 ID 无效'] }]);
     }
-    const roleId = BigInt(id);
+    const roleId = id;
     const row = await this.prisma.$transaction(
       async (tx) => {
         const role = await tx.role.findFirst({
@@ -350,10 +336,8 @@ export class RoleService {
     })!;
   }
 
-  async remove(id: string, actor: AuthenticatedUser): Promise<void> {
-    if (!isUserId(id))
-      throw BusinessException.validation([{ field: 'id', messages: ['角色 ID 无效'] }]);
-    const roleId = BigInt(id);
+  async remove(id: bigint, actor: AuthenticatedUser): Promise<void> {
+    const roleId = id;
     await this.prisma.$transaction(
       async (tx) => {
         const role = await tx.role.findFirst({

@@ -1,4 +1,10 @@
-import { PageMetaDto, PageQueryDto } from '@app/common';
+import {
+  BIGINT_ID_PATTERN,
+  CONTAINS_NON_WHITESPACE_PATTERN,
+  PageMetaDto,
+  PageQueryDto,
+  TRIMMED_TEXT_PATTERN,
+} from '@app/common';
 import { DateFormat } from '@app/core';
 import { PartialType } from '@nestjs/swagger';
 import { Exclude, Expose, Type } from 'class-transformer';
@@ -18,13 +24,13 @@ import {
 export class CreateUserDto {
   /** 账号，未删除用户内精确查重。 */
   @IsString()
-  @Matches(/^\S(?:.*\S)?$/)
+  @Matches(TRIMMED_TEXT_PATTERN)
   @MaxLength(64)
   userName!: string;
 
   /** 用户昵称。 */
   @IsString()
-  @Matches(/\S/)
+  @Matches(CONTAINS_NON_WHITESPACE_PATTERN)
   @MaxLength(100)
   nickName!: string;
 
@@ -37,7 +43,7 @@ export class CreateUserDto {
   /** 所属部门；null 表示不分配部门。 */
   @IsOptional()
   @IsString()
-  @Matches(/^[1-9]\d{0,18}$/)
+  @Matches(BIGINT_ID_PATTERN)
   @MaxLength(19)
   @Type(() => String)
   deptId?: string | null;
@@ -69,7 +75,7 @@ export class CreateUserDto {
   @IsArray()
   @ArrayMaxSize(1000)
   @IsString({ each: true })
-  @Matches(/^[1-9]\d{0,18}$/, { each: true })
+  @Matches(BIGINT_ID_PATTERN, { each: true })
   @MaxLength(19, { each: true })
   @Type(() => String)
   postIds?: string[];
@@ -98,7 +104,7 @@ export class UserQueryDto extends PageQueryDto {
   /** 所属部门精确匹配，不扩展下级。 */
   @ValidateIf((_object, value) => value !== undefined)
   @IsString()
-  @Matches(/^[1-9]\d{0,18}$/)
+  @Matches(BIGINT_ID_PATTERN)
   @MaxLength(19)
   @Type(() => String)
   deptId?: string;
@@ -109,7 +115,7 @@ export class AssignUserRolesDto {
   @IsArray()
   @ArrayMaxSize(1000)
   @IsString({ each: true })
-  @Matches(/^[1-9]\d{0,18}$/, { each: true })
+  @Matches(BIGINT_ID_PATTERN, { each: true })
   @MaxLength(19, { each: true })
   @Type(() => String)
   roleIds!: string[];

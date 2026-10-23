@@ -9,7 +9,9 @@ import type {
 } from './auth.types.js';
 import type { AuthSession } from './session.store.js';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { REFRESH_TOKEN_PATTERN, SESSION_ID_PATTERN } from '@app/common/constants/regex.js';
 import { authConfig } from '@app/config';
+import { isBigIntId } from '@app/core/validators/bigint-id.js';
 import { PrismaService } from '@app/database';
 import {
   Inject,
@@ -18,7 +20,6 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { isUserId, REFRESH_TOKEN_PATTERN, SESSION_ID_PATTERN } from './auth.types.js';
 import { SessionStore } from './session.store.js';
 
 @Injectable()
@@ -112,7 +113,7 @@ export class AuthService {
    * 对应 RuoYi `SysLoginService.buildLoginUser` 把权限写进 `LoginUser` 再落 Token Session。
    */
   async createSession(userId: string, snapshot: AuthSnapshot): Promise<TokenPair> {
-    if (!isUserId(userId)) throw new UnauthorizedException('未认证');
+    if (!isBigIntId(userId)) throw new UnauthorizedException('未认证');
     await this.loadUser(userId);
     const sid = randomUUID();
     const refreshToken = `${sid}.${randomBytes(32).toString('base64url')}`;
@@ -134,7 +135,7 @@ export class AuthService {
       const value = await this.jwt.verifyAsync<AccessTokenClaims>(token);
       const now = Math.floor(Date.now() / 1000);
       if (
-        !isUserId(value.sub) ||
+        !isBigIntId(value.sub) ||
         typeof value.sid !== 'string' ||
         value.sid.length !== 36 ||
         !SESSION_ID_PATTERN.test(value.sid) ||

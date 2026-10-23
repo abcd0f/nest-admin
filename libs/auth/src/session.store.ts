@@ -1,12 +1,12 @@
 import type { AuthSnapshot } from './auth.types.js';
 import { RedisService } from '@app/cache';
+import { isBigIntId } from '@app/core/validators/bigint-id.js';
 import {
   Inject,
   Injectable,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { isUserId } from './auth.types.js';
 
 export interface AuthSession extends AuthSnapshot {
   userId: string;
@@ -92,7 +92,7 @@ export class SessionStore {
       session = JSON.parse(raw) as AuthSession;
       if (
         !session ||
-        !isUserId(session.userId) ||
+        !isBigIntId(session.userId) ||
         typeof session.refreshHash !== 'string' ||
         !/^[a-f0-9]{64}$/.test(session.refreshHash) ||
         !Number.isSafeInteger(session.expiresAt) ||
@@ -131,7 +131,7 @@ export class SessionStore {
    * 否则旧权限会一直有效到会话过期。索引里残留的已过期 sid 直接删除，不单独判断。
    */
   async revokeUser(userId: string): Promise<number> {
-    if (!isUserId(userId)) throw new UnauthorizedException('未认证');
+    if (!isBigIntId(userId)) throw new UnauthorizedException('未认证');
     return this.execute(async () => {
       const indexKey = this.redis.key(this.userKey(userId));
       const sids = await this.redis.execute((client) => client.sMembers(indexKey));

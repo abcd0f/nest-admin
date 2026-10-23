@@ -1,3 +1,5 @@
+import { REGEX_SPECIAL_CHARS_PATTERN } from '@app/common/constants/regex.js';
+
 /**
  * 超级管理员常量与通配权限匹配。
  *
@@ -44,7 +46,7 @@ export function vagueMatch(pattern: string, value: string): boolean {
   if (pattern === value) return true;
   if (!pattern.includes('*')) return false;
   const body = [...pattern]
-    .map((char) => (char === '*' ? '.*' : char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+    .map((char) => (char === '*' ? '.*' : char.replace(REGEX_SPECIAL_CHARS_PATTERN, '\\$&')))
     .join('');
   return new RegExp(`^${body}$`, 'u').test(value);
 }

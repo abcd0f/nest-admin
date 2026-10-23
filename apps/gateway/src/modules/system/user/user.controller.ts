@@ -33,7 +33,7 @@ export class UserController {
   @Get(':id')
   @Permission('system:user:query')
   findOne(
-    @Param('id') id: string,
+    @Param('id') id: bigint,
     @CurrentUser() actor: AuthenticatedUser,
   ): Promise<UserResponseDto> {
     return this.service.findOne(id, actor);
@@ -53,7 +53,7 @@ export class UserController {
   @Put(':id')
   @Permission('system:user:edit')
   update(
-    @Param('id') id: string,
+    @Param('id') id: bigint,
     @Body() body: UpdateUserDto,
     @CurrentUser() actor: AuthenticatedUser,
   ): Promise<UserResponseDto> {
@@ -64,7 +64,7 @@ export class UserController {
   @Put('authRole/:id')
   @Permission('system:user:assignRoles')
   assignRoles(
-    @Param('id') id: string,
+    @Param('id') id: bigint,
     @Body() body: AssignUserRolesDto,
     @CurrentUser() actor: AuthenticatedUser,
   ): Promise<UserResponseDto> {
@@ -74,7 +74,7 @@ export class UserController {
   /** 逻辑删除并移除角色关联，不能删除本人或仍任部门负责人的用户。 */
   @Delete(':id')
   @Permission('system:user:delete')
-  remove(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser): Promise<void> {
+  remove(@Param('id') id: bigint, @CurrentUser() actor: AuthenticatedUser): Promise<void> {
     return this.service.remove(id, actor);
   }
 }

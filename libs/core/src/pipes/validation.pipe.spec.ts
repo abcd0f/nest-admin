@@ -35,17 +35,17 @@ describe('全局 DTO 校验', () => {
         BusinessException,
       );
     }
-    const result = await pipe.transform(
+    const result = (await pipe.transform(
       { userName: 'alice', password: '  secret  ' },
       { type: 'body', metatype: LoginDto },
-    );
+    )) as LoginDto;
     expect(result.password).toBe('  secret  ');
   });
 
   it('扁平化嵌套字段路径，不包含 target/value 或插值后的敏感字段', async () => {
-    const error = await pipe
+    const error = (await pipe
       .transform({ items: [{ name: 42 }] }, { type: 'body', metatype: NestedDto })
-      .catch((value) => value);
+      .catch((value) => value)) as BusinessException;
     expect(error).toBeInstanceOf(BusinessException);
     expect(error.getStatus()).toBe(422);
     expect(error.errors).toEqual([{ field: 'items.0.name', messages: ['字段校验失败'] }]);

@@ -13,9 +13,12 @@ import { ConflictException } from '@nestjs/common';
  * RuoYi 没有、本项目也不再需要额外的"最后一位管理员"检查。
  *
  * 副作用与 Java 一致：超管无法通过管理端点改自己的资料或密码，需要单独的 profile 通道。
+ *
+ * 入参是已由全局 `BigIntIdPipe` 转换过的 `bigint`，这里再转回字符串与常量比较，
+ * 避免 19 位 ID 在比较时经过 `Number`。
  */
-export function assertNotSuperAdmin(userId: string): void {
-  if (isSuperAdmin(userId)) {
+export function assertNotSuperAdmin(userId: bigint): void {
+  if (isSuperAdmin(String(userId))) {
     throw new ConflictException('不允许操作超级管理员用户');
   }
 }

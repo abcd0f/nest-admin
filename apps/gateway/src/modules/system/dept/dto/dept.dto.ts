@@ -1,3 +1,8 @@
+import {
+  BIGINT_ID_PATTERN,
+  CONTAINS_NON_WHITESPACE_PATTERN,
+  PARENT_ID_PATTERN,
+} from '@app/common';
 import { DateFormat } from '@app/core';
 import { ApiProperty, PartialType } from '@nestjs/swagger';
 import { Exclude, Expose, Type } from 'class-transformer';
@@ -17,14 +22,14 @@ export class CreateDeptDto {
   /** 父部门 ID，缺省 "0"。ancestors 由服务端维护。 */
   @ValidateIf((_object, value) => value !== undefined)
   @IsString()
-  @Matches(/^(0|[1-9]\d{0,18})$/)
+  @Matches(PARENT_ID_PATTERN)
   @MaxLength(19)
   @Type(() => String)
   parentId?: string;
 
   /** 部门名称。 */
   @IsString()
-  @Matches(/\S/)
+  @Matches(CONTAINS_NON_WHITESPACE_PATTERN)
   @MaxLength(64)
   deptName!: string;
 
@@ -38,7 +43,7 @@ export class CreateDeptDto {
   /** 负责人用户 ID；null 清空。 */
   @IsOptional()
   @IsString()
-  @Matches(/^[1-9]\d{0,18}$/)
+  @Matches(BIGINT_ID_PATTERN)
   @MaxLength(19)
   @Type(() => String)
   leaderId?: string | null;

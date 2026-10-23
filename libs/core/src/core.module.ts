@@ -9,7 +9,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 import { AllExceptionsFilter } from './filters/index.js';
 import { ResponseInterceptor } from './interceptors/index.js';
-import { DtoValidationPipe } from './pipes/index.js';
+import { BigIntIdPipe, DtoValidationPipe } from './pipes/index.js';
 
 /**
  * core 基础设施模块。
@@ -30,6 +30,9 @@ import { DtoValidationPipe } from './pipes/index.js';
     }),
   ],
   providers: [
+    // 先转换路由主键再校验 DTO：声明为 bigint 的参数在进入 handler 前已是 bigint，
+    // 未声明的参数本管道直接透传，互不干扰。
+    { provide: APP_PIPE, useClass: BigIntIdPipe },
     { provide: APP_PIPE, useClass: DtoValidationPipe },
     {
       provide: APP_GUARD,

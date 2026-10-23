@@ -8,10 +8,10 @@ import {
 
 describe('超级管理员写保护', () => {
   it('拒绝操作 1 号用户，其他 ID 不受影响', () => {
-    expect(() => assertNotSuperAdmin('1')).toThrow(ConflictException);
-    expect(() => assertNotSuperAdmin('1')).toThrow('不允许操作超级管理员用户');
-    // 只有规范化十进制 '1' 是超管；这些看起来像 1 的写法都不算。
-    for (const id of ['2', '01', '1.0', ' 1', '9223372036854775807']) {
+    expect(() => assertNotSuperAdmin(1n)).toThrow(ConflictException);
+    expect(() => assertNotSuperAdmin(1n)).toThrow('不允许操作超级管理员用户');
+    // '01'、'1.0'、' 1' 这类非规范化写法在进入本函数前就被全局 BigIntIdPipe 拒绝，这里只验证正常 ID 放行。
+    for (const id of [2n, 9223372036854775807n]) {
       expect(() => assertNotSuperAdmin(id)).not.toThrow();
     }
   });

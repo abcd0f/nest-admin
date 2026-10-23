@@ -23,7 +23,7 @@ export class DeptController {
   @Get(':id')
   @Permission('system:dept:query')
   findOne(
-    @Param('id') id: string,
+    @Param('id') id: bigint,
     @CurrentUser() actor: AuthenticatedUser,
   ): Promise<DeptResponseDto> {
     return this.service.findOne(id, actor);
@@ -43,7 +43,7 @@ export class DeptController {
   @Put(':id')
   @Permission('system:dept:edit')
   update(
-    @Param('id') id: string,
+    @Param('id') id: bigint,
     @Body() body: UpdateDeptDto,
     @CurrentUser() actor: AuthenticatedUser,
   ): Promise<DeptResponseDto> {
@@ -53,7 +53,7 @@ export class DeptController {
   /** 逻辑删除部门，拒绝子部门、用户或角色数据范围引用。 */
   @Delete(':id')
   @Permission('system:dept:delete')
-  remove(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser): Promise<void> {
+  remove(@Param('id') id: bigint, @CurrentUser() actor: AuthenticatedUser): Promise<void> {
     return this.service.remove(id, actor);
   }
 }

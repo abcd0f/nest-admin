@@ -1,6 +1,7 @@
 import type { AuthSnapshot } from './auth.types.js';
 import type { AuthSession } from './session.store.js';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { REFRESH_TOKEN_PATTERN, SHA256_HEX_PATTERN } from '@app/common/constants/regex.js';
 import { ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -72,7 +73,7 @@ describe('jWT 与会话认证', () => {
     const { auth, sessions, prisma } = fixture();
     const pair = await auth.createSession('1', snapshot);
     expect(pair).toMatchObject({ tokenType: 'Bearer', expiresIn: 900 });
-    expect(pair.refreshToken).toMatch(/^[a-f0-9-]{36}\.[\w-]{43}$/);
+    expect(pair.refreshToken).toMatch(REFRESH_TOKEN_PATTERN);
     const claims = await jwt.verifyAsync(pair.accessToken);
     expect(claims).toMatchObject({ sub: '1', iss: config.jwtIssuer, aud: config.jwtAudience });
     expect(claims.exp - claims.iat).toBe(900);
@@ -93,7 +94,7 @@ describe('jWT 与会话认证', () => {
       roles: ['operator'],
       permissions: ['system:user:list', '*:*:*'],
     });
-    expect(sessions.create.mock.calls[0][1].refreshHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(sessions.create.mock.calls[0][1].refreshHash).toMatch(SHA256_HEX_PATTERN);
     expect(JSON.stringify(sessions.create.mock.calls)).not.toContain(pair.refreshToken);
     expect(prisma.user.findUnique.mock.calls[0][0].select).not.toHaveProperty('password');
     // 只读角色和自定义部门用于数据范围，不读菜单（功能权限走登录快照）。

@@ -1,4 +1,10 @@
-import { PageMetaDto, PageQueryDto } from '@app/common';
+import {
+  BIGINT_ID_PATTERN,
+  CONTAINS_NON_WHITESPACE_PATTERN,
+  IDENTIFIER_WITHOUT_WILDCARD_PATTERN,
+  PageMetaDto,
+  PageQueryDto,
+} from '@app/common';
 import { DateFormat } from '@app/core';
 import { PartialType } from '@nestjs/swagger';
 import { Exclude, Expose, Type } from 'class-transformer';
@@ -22,13 +28,13 @@ import { MenuTreeDto } from '../../menu/dto/menu.dto.js';
 export class CreateRoleDto {
   /** 角色名称。 */
   @IsString()
-  @Matches(/\S/)
+  @Matches(CONTAINS_NON_WHITESPACE_PATTERN)
   @MaxLength(64)
   roleName!: string;
 
   /** 角色标识，未删除角色内精确查重，不允许空白和通配符。 */
   @IsString()
-  @Matches(/^[^\s*]+$/)
+  @Matches(IDENTIFIER_WITHOUT_WILDCARD_PATTERN)
   @MaxLength(64)
   roleKey!: string;
 
@@ -91,7 +97,7 @@ export class AssignRoleMenusDto {
   @IsArray()
   @ArrayMaxSize(1000)
   @IsString({ each: true })
-  @Matches(/^[1-9]\d{0,18}$/, { each: true })
+  @Matches(BIGINT_ID_PATTERN, { each: true })
   @MaxLength(19, { each: true })
   @Type(() => String)
   menuIds!: string[];
@@ -107,7 +113,7 @@ export class RoleDataScopeDto {
   @IsArray()
   @ArrayMaxSize(1000)
   @IsString({ each: true })
-  @Matches(/^[1-9]\d{0,18}$/, { each: true })
+  @Matches(BIGINT_ID_PATTERN, { each: true })
   @MaxLength(19, { each: true })
   @Type(() => String)
   deptIds?: string[];

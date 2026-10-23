@@ -1,8 +1,7 @@
 import type { AuthenticatedUser } from '@app/auth';
 import type { Prisma } from '@app/database/generated/prisma/client.js';
-import { isUserId } from '@app/auth';
 import { toDto, toDtoList, toTree } from '@app/common';
-import { BusinessException } from '@app/core';
+import { BusinessException, isBigIntId } from '@app/core';
 import { PrismaService } from '@app/database';
 import { isDeptInScope, loadDataScope, withDataScope } from '@app/permission';
 import {
@@ -70,12 +69,10 @@ export class DeptService {
     }
   }
 
-  async findOne(id: string, actor: AuthenticatedUser) {
-    if (!isUserId(id))
-      throw BusinessException.validation([{ field: 'id', messages: ['部门 ID 无效'] }]);
+  async findOne(id: bigint, actor: AuthenticatedUser) {
     const row = await this.prisma.dept.findFirst({
       where: withDataScope(
-        { deptId: BigInt(id), delFlag: '0' },
+        { deptId: id, delFlag: '0' },
         await loadDataScope(this.prisma, actor),
         DEPT_SCOPE_COLUMNS,
       ),
@@ -86,10 +83,10 @@ export class DeptService {
   }
 
   async create(body: CreateDeptDto, actor: AuthenticatedUser) {
-    if (body.parentId !== undefined && body.parentId !== '0' && !isUserId(body.parentId)) {
+    if (body.parentId !== undefined && body.parentId !== '0' && !isBigIntId(body.parentId)) {
       throw BusinessException.validation([{ field: 'parentId', messages: ['父部门 ID 无效'] }]);
     }
-    if (body.leaderId != null && !isUserId(body.leaderId)) {
+    if (body.leaderId != null && !isBigIntId(body.leaderId)) {
       throw BusinessException.validation([{ field: 'leaderId', messages: ['负责人 ID 无效'] }]);
     }
     // 父部门必须在当前范围内：否则会造出自己看不见的部门子树。
@@ -138,16 +135,14 @@ export class DeptService {
     return toDto(DeptResponseDto, row)!;
   }
 
-  async update(id: string, body: UpdateDeptDto, actor: AuthenticatedUser) {
-    if (!isUserId(id))
-      throw BusinessException.validation([{ field: 'id', messages: ['部门 ID 无效'] }]);
-    if (body.parentId !== undefined && body.parentId !== '0' && !isUserId(body.parentId)) {
+  async update(id: bigint, body: UpdateDeptDto, actor: AuthenticatedUser) {
+    if (body.parentId !== undefined && body.parentId !== '0' && !isBigIntId(body.parentId)) {
       throw BusinessException.validation([{ field: 'parentId', messages: ['父部门 ID 无效'] }]);
     }
-    if (body.leaderId != null && !isUserId(body.leaderId)) {
+    if (body.leaderId != null && !isBigIntId(body.leaderId)) {
       throw BusinessException.validation([{ field: 'leaderId', messages: ['负责人 ID 无效'] }]);
     }
-    const deptId = BigInt(id);
+    const deptId = id;
     const scope = await loadDataScope(this.prisma, actor);
     // 换父部门也要在范围内，否则可以把部门子树整体挪到自己看不见的位置。
     if (body.parentId !== undefined && !isDeptInScope(scope, body.parentId)) {
@@ -225,10 +220,8 @@ export class DeptService {
     return toDto(DeptResponseDto, row)!;
   }
 
-  async remove(id: string, actor: AuthenticatedUser): Promise<void> {
-    if (!isUserId(id))
-      throw BusinessException.validation([{ field: 'id', messages: ['部门 ID 无效'] }]);
-    const deptId = BigInt(id);
+  async remove(id: bigint, actor: AuthenticatedUser): Promise<void> {
+    const deptId = id;
     const scope = await loadDataScope(this.prisma, actor);
     await this.prisma.$transaction(
       async (tx) => {

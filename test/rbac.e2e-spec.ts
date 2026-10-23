@@ -9,7 +9,7 @@ import { createFastifyAdapter } from '@app/common';
 import { loggerConfig } from '@app/config';
 import { PrismaService } from '@app/database';
 import { Authenticated, Mode, Permission, PermissionService, RequirePermissions, Role } from '@app/permission';
-import { Body, Controller, Get, Inject, Post, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Post, UnauthorizedException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppModule } from '../apps/gateway/src/app.module.js';
@@ -73,6 +73,13 @@ class ProbeController {
     return { userName: body.userName };
   }
 
+  /** 声明成 bigint 的路径参数由全局 `BigIntIdPipe` 转换并校验，这里回显以验证精度。 */
+  @Get('bigint/:id')
+  @Authenticated()
+  bigintId(@Param('id') id: bigint) {
+    return String(id);
+  }
+
   @Post('unmarked')
   unmarked() {
     return true;
@@ -87,13 +94,19 @@ class ProbeController {
 
 // Vitest 不运行 Nest 的 emitDecoratorMetadata 编译链，显式保留 DTO metatype。
 Reflect.defineMetadata('design:paramtypes', [LoginDto], ProbeController.prototype, 'validated');
+// 同理，`bigint` 参数在编译期才会被发射成 `BigInt`，测试里必须手工补上。
+Reflect.defineMetadata('design:paramtypes', [BigInt], ProbeController.prototype, 'bigintId');
 
 function assignment(roleKey = 'operator', permissions = ['system:user:list']) {
   return {
     role: {
+      // `loadUser` 会连数据范围一起加载，探针的 mock 必须给出这些字段，否则建会话时取不到 depts。
+      roleId: 2n,
       roleKey,
+      dataScope: '1',
       status: '0',
       delFlag: '0',
+      depts: [],
       menus: permissions.map((perms) => ({ menu: { perms, status: '0', menuType: 'F' } })),
     },
   };
@@ -284,6 +297,28 @@ describe('实际网关 RBAC 接入 (e2e)', () => {
       (await app.inject({ ...request, payload: { userName: 'alice', password: 'secret' } }))
         .statusCode,
     ).toBe(201);
+  });
+
+  it('全局 BigIntIdPipe 转换并校验路径主键，溢出值返回 422 且不经过 Number', async () => {
+    const request = (id: string) =>
+      app.inject({
+        url: `/api/rbac-probe/bigint/${id}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+    // int64 上界必须原样往返：走 Number 会变成 9223372036854775807 → 精度丢失。
+    expect((await request('9223372036854775807')).json()).toMatchObject({
+      code: 0,
+      data: '9223372036854775807',
+    });
+    for (const id of ['0', '01', '1.0', '9223372036854775808', 'abc']) {
+      const response = await request(id);
+      expect(response.statusCode).toBe(422);
+      expect(response.json()).toMatchObject({
+        code: 422,
+        data: null,
+        errors: [{ field: 'id', messages: ['ID 无效'] }],
+      });
+    }
   });
 
   it('主模块直接注册两个守卫，HTTP 验证 AND/OR、角色兜底与叠加规则', async () => {

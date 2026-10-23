@@ -1,4 +1,4 @@
-import { REFRESH_TOKEN_PATTERN } from '@app/auth';
+import { REFRESH_TOKEN_PATTERN } from '@app/common';
 import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty, IsString, Length, Matches, MaxLength } from 'class-validator';
 

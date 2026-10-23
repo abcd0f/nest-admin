@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { CACHE_MANAGER, CacheModule, CacheService, RedisClient, RedisLockBusyError, RedisLockLostError, RedisService } from '@app/cache';
 import { createFastifyAdapter } from '@app/common';
+import { IPV6_HOST_BRACKETS_PATTERN } from '@app/common/constants/regex.js';
 import { loggerConfig, redisConfig } from '@app/config';
 import { PrismaService } from '@app/database';
 import { Test } from '@nestjs/testing';
@@ -29,7 +30,7 @@ function testConfig() {
   return redisDomain.parse({
     enabled: true,
     ttl: 5000,
-    host: url.hostname.replace(/^\[|\]$/g, ''),
+    host: url.hostname.replace(IPV6_HOST_BRACKETS_PATTERN, ''),
     port: url.port || '6379',
     db: url.pathname.slice(1) || '0',
     'key-prefix': `test:${randomUUID()}`,

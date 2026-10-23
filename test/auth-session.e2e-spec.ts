@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { AuthService } from '@app/auth';
 import { RedisClient, RedisService } from '@app/cache';
+import { IPV6_HOST_BRACKETS_PATTERN } from '@app/common/constants/regex.js';
 import { UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -27,7 +28,7 @@ describe.skipIf(!testUrl)('真实 Redis 会话与原子刷新 (e2e)', () => {
       redisDomain.parse(
         {
           enabled: true,
-          host: url.hostname.replace(/^\[|\]$/g, ''),
+          host: url.hostname.replace(IPV6_HOST_BRACKETS_PATTERN, ''),
           port: url.port || 6379,
           username: decodeURIComponent(url.username) || undefined,
           password: decodeURIComponent(url.password) || undefined,
