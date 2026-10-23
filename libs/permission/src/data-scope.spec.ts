@@ -48,7 +48,9 @@ describe('数据范围解析', () => {
   });
 
   it('本部门及以下使用传入的子树，仅本人只产生本人分支', () => {
-    expect(resolveDataScope(subject([scope(DATA_SCOPE.DEPT_AND_CHILD)]), ['10', '11', '12'])).toEqual({
+    expect(
+      resolveDataScope(subject([scope(DATA_SCOPE.DEPT_AND_CHILD)]), ['10', '11', '12']),
+    ).toEqual({
       kind: 'limited',
       deptIds: ['10', '11', '12'],
       selfUserId: null,
@@ -58,12 +60,6 @@ describe('数据范围解析', () => {
       deptIds: [],
       selfUserId: '2',
     });
-  });
-
-  it('部门及以下或本人同时产生两个分支', () => {
-    expect(
-      resolveDataScope(subject([scope(DATA_SCOPE.DEPT_AND_CHILD_OR_SELF)]), ['10', '11']),
-    ).toEqual({ kind: 'limited', deptIds: ['10', '11'], selfUserId: '2' });
   });
 
   it('多角色取并集并去重', () => {
@@ -87,17 +83,18 @@ describe('数据范围解析', () => {
     expect(() => resolveDataScope(subject([scope('')]))).toThrow(ForbiddenException);
   });
 
-  it('只有 4/6 需要部门子树', () => {
+  it('只有本部门及以下需要部门子树', () => {
     expect(needsDeptAndChild([scope(DATA_SCOPE.DEPT)])).toBe(false);
+    expect(needsDeptAndChild([scope(DATA_SCOPE.SELF)])).toBe(false);
+    expect(needsDeptAndChild([scope(DATA_SCOPE.CUSTOM, ['10'])])).toBe(false);
     expect(needsDeptAndChild([scope(DATA_SCOPE.SELF), scope(DATA_SCOPE.DEPT_AND_CHILD)])).toBe(
       true,
     );
-    expect(needsDeptAndChild([scope(DATA_SCOPE.DEPT_AND_CHILD_OR_SELF)])).toBe(true);
   });
 });
 
 describe('查询条件组装', () => {
-  const columns = { dept: 'deptId', owner: 'createBy' };
+  const columns = { dept: 'deptId', self: 'userId' };
 
   it('不受限时原样返回，不改变调用方条件', () => {
     const where = { delFlag: '0' };
@@ -115,10 +112,7 @@ describe('查询条件组装', () => {
     expect(
       withDataScope(where, { kind: 'limited', deptIds: ['10', '11'], selfUserId: '2' }, columns),
     ).toEqual({
-      AND: [
-        where,
-        { OR: [{ deptId: { in: [10n, 11n] } }, { createBy: 2n }] },
-      ],
+      AND: [where, { OR: [{ deptId: { in: [10n, 11n] } }, { userId: 2n }] }],
     });
   });
 
@@ -126,12 +120,27 @@ describe('查询条件组装', () => {
     expect(
       withDataScope({}, { kind: 'limited', deptIds: ['10'], selfUserId: null }, columns),
     ).toEqual({ AND: [{}, { deptId: { in: [10n] } }] });
+    expect(withDataScope({}, { kind: 'limited', deptIds: [], selfUserId: '2' }, columns)).toEqual({
+      AND: [{}, { userId: 2n }],
+    });
   });
 
-  it('模型没有归属人列时忽略本人分支，不会生成无效字段', () => {
+  it('模型没有归属人列时忽略本人分支', () => {
+    expect(
+      withDataScope({}, { kind: 'limited', deptIds: ['10'], selfUserId: '2' }, { dept: 'deptId' }),
+    ).toEqual({ AND: [{}, { deptId: { in: [10n] } }] });
+  });
+
+  it('模型没有归属人列且只剩本人分支时退化成恒假条件', () => {
     expect(
       withDataScope({}, { kind: 'limited', deptIds: [], selfUserId: '2' }, { dept: 'deptId' }),
     ).toEqual({ AND: [{}, { deptId: { in: [] } }] });
+  });
+
+  it('缺少全部归属列时显式报错，不静默放行', () => {
+    expect(() =>
+      withDataScope({}, { kind: 'limited', deptIds: ['10'], selfUserId: null }, {}),
+    ).toThrow('数据范围缺少可用的归属列');
   });
 });
 

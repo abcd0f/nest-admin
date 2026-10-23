@@ -37,8 +37,13 @@ const userSelect = {
   posts: { select: { postId: true }, orderBy: { postId: 'asc' } },
 } satisfies Prisma.UserSelect;
 
-/** 用户的数据归属：部门 + 创建人，对应 Java `@DataColumn(deptName→dept_id, userName→create_by)`。 */
-const USER_SCOPE_COLUMNS = { dept: 'deptId', owner: 'createBy' } as const;
+/**
+ * 用户的数据归属：所属部门 + 用户自身。
+ *
+ * `self` 指向 `userId`：本项目不记录 `create_by`，所以"仅本人"的语义是
+ * "这条记录就是我"，而不是 Java 的"我创建的记录"。
+ */
+const USER_SCOPE_COLUMNS = { dept: 'deptId', self: 'userId' } as const;
 
 @Injectable()
 export class UserService {
@@ -139,7 +144,6 @@ export class UserService {
             sex: body.sex,
             status: body.status,
             remark: body.remark,
-            createBy: BigInt(actor.userId),
           },
           select: userSelect,
         });
@@ -217,7 +221,6 @@ export class UserService {
             sex: body.sex,
             status: body.status,
             remark: body.remark,
-            updateBy: BigInt(actor.userId),
           },
           select: userSelect,
         });
@@ -236,6 +239,10 @@ export class UserService {
 
   async assignRoles(id: bigint, body: AssignUserRolesDto, actor: AuthenticatedUser) {
     this.assertNotSuperAdmin(id);
+    // "仅本人"范围下自己也在可写集合里，必须挡住自授权：否则能给自己加任意角色。
+    if (id === BigInt(actor.userId)) {
+      throw new ConflictException('不能修改自己的角色');
+    }
     if (body.roleIds.some((roleId) => !isBigIntId(roleId))) {
       throw BusinessException.validation('角色 ID 无效');
     }
@@ -259,11 +266,10 @@ export class UserService {
         await tx.userRole.deleteMany({ where: { userId } });
         if (ids.length)
           await tx.userRole.createMany({ data: ids.map((roleId) => ({ userId, roleId })) });
-        return tx.user.update({
-          where: { userId },
-          data: { updateBy: BigInt(actor.userId) },
-          select: userSelect,
-        });
+        // 关联已整体替换，重新读一次拿到最新的 roles/posts 用于响应。
+        const updated = await tx.user.findFirst({ where: { userId }, select: userSelect });
+        if (!updated) throw new NotFoundException('用户不存在');
+        return updated;
       },
       { isolationLevel: 'Serializable' },
     );
@@ -295,7 +301,7 @@ export class UserService {
         await tx.userPost.deleteMany({ where: { userId } });
         await tx.user.update({
           where: { userId },
-          data: { delFlag: '2', updateBy: BigInt(actor.userId) },
+          data: { delFlag: '2' },
         });
       },
       { isolationLevel: 'Serializable' },

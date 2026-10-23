@@ -1,4 +1,3 @@
-import type { AuthenticatedUser } from '@app/auth';
 import type { Prisma } from '@app/database/generated/prisma/client.js';
 import { AuthService } from '@app/auth';
 import { toDto, toDtoList, toTree } from '@app/common';
@@ -74,7 +73,7 @@ export class MenuService {
     return toDto(MenuResponseDto, row)!;
   }
 
-  async create(body: CreateMenuDto, actor: AuthenticatedUser) {
+  async create(body: CreateMenuDto) {
     if (body.parentId !== undefined && body.parentId !== '0' && !isBigIntId(body.parentId)) {
       throw BusinessException.validation('父菜单 ID 无效');
     }
@@ -103,7 +102,6 @@ export class MenuService {
             perms: body.perms,
             icon: body.icon,
             remark: body.remark,
-            createBy: BigInt(actor.userId),
           },
           select: menuSelect,
         });
@@ -113,7 +111,7 @@ export class MenuService {
     return toDto(MenuResponseDto, row)!;
   }
 
-  async update(id: bigint, body: UpdateMenuDto, actor: AuthenticatedUser) {
+  async update(id: bigint, body: UpdateMenuDto) {
     if (body.parentId !== undefined && body.parentId !== '0' && !isBigIntId(body.parentId)) {
       throw BusinessException.validation('父菜单 ID 无效');
     }
@@ -151,7 +149,6 @@ export class MenuService {
             perms: body.perms,
             icon: body.icon,
             remark: body.remark,
-            updateBy: BigInt(actor.userId),
           },
           select: menuSelect,
         });

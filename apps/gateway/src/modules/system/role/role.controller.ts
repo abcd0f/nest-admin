@@ -61,11 +61,8 @@ export class RoleController {
   /** 创建角色，初始数据范围为本人，初始无菜单权限。 */
   @Post()
   @Permission('system:role:add')
-  create(
-    @Body() body: CreateRoleDto,
-    @CurrentUser() actor: AuthenticatedUser,
-  ): Promise<RoleResponseDto> {
-    return this.service.create(body, actor);
+  create(@Body() body: CreateRoleDto): Promise<RoleResponseDto> {
+    return this.service.create(body);
   }
 
   /** 更新角色基本资料或状态。 */
@@ -74,9 +71,8 @@ export class RoleController {
   update(
     @Param('id') id: bigint,
     @Body() body: UpdateRoleDto,
-    @CurrentUser() actor: AuthenticatedUser,
   ): Promise<RoleResponseDto> {
-    return this.service.update(id, body, actor);
+    return this.service.update(id, body);
   }
 
   /** 事务内完整替换菜单关联。Java 没有独立端点，菜单随角色更新一起提交；这里拆分以便单独授权。 */
@@ -85,9 +81,8 @@ export class RoleController {
   assignMenus(
     @Param('id') id: bigint,
     @Body() body: AssignRoleMenusDto,
-    @CurrentUser() actor: AuthenticatedUser,
   ): Promise<RoleResponseDto> {
-    return this.service.assignMenus(id, body, actor);
+    return this.service.assignMenus(id, body);
   }
 
   /** 同一事务更新数据范围和自定义部门集合。路径对齐 Java `/system/role/dataScope`。 */
@@ -96,15 +91,14 @@ export class RoleController {
   dataScope(
     @Param('id') id: bigint,
     @Body() body: RoleDataScopeDto,
-    @CurrentUser() actor: AuthenticatedUser,
   ): Promise<RoleResponseDto> {
-    return this.service.dataScope(id, body, actor);
+    return this.service.dataScope(id, body);
   }
 
   /** 逻辑删除无用户引用的角色，同时清理菜单和部门关联。 */
   @Delete(':id')
   @Permission('system:role:delete')
-  remove(@Param('id') id: bigint, @CurrentUser() actor: AuthenticatedUser): Promise<void> {
-    return this.service.remove(id, actor);
+  remove(@Param('id') id: bigint): Promise<void> {
+    return this.service.remove(id);
   }
 }

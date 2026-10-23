@@ -4,25 +4,31 @@ import { ForbiddenException } from '@nestjs/common';
 import { isSuperAdmin } from './permission.constants.js';
 
 /**
- * 数据范围码，与 RuoYi `DataScopeType` 一一对应。
+ * 数据范围码。
+ *
+ * 编码与 RuoYi 的 `sys_data_scope` 字典**不同**（RuoYi 是 1全部 2自定义 3本部门
+ * 4本部门及以下 5仅本人），这里按 1全部 2本部门 3本部门及以下 4仅本人 5自定义。
+ * 前端选项、`sys_role.data_scope` 存量数据、种子 SQL 必须用同一套编码，改码要一起改。
  *
  * 与 Java 的差异只在执行方式：Java 在 MyBatis 拦截器里改写 SQL，Prisma 没有等价拦截点，
  * 所以这里产出**可组合的查询条件**，由业务 service 显式合入 `where`。
  * 语义（范围码含义、多角色并集、失败关闭）保持一致。
+ *
+ * 注意：本项目的表不记录 `create_by`，"本人"不是"我创建的记录"，而是"记录本身就是我"——
+ * 只有带归属人列（`DataScopeColumns.self`）的模型才表达得出来。目前只有 `User.userId` 满足；
+ * 部门/岗位/菜单/角色没有该列，"仅本人"在那里退化成空范围（拒绝）。
  */
 export const DATA_SCOPE = {
   /** 全部数据。 */
   ALL: '1',
-  /** 自定义：`RoleDept` 指定的部门。 */
-  CUSTOM: '2',
   /** 本部门。 */
-  DEPT: '3',
+  DEPT: '2',
   /** 本部门及以下。 */
-  DEPT_AND_CHILD: '4',
-  /** 仅本人。 */
-  SELF: '5',
-  /** 部门及以下或本人。 */
-  DEPT_AND_CHILD_OR_SELF: '6',
+  DEPT_AND_CHILD: '3',
+  /** 仅本人。匹配归属人列（如 `User.userId`）。 */
+  SELF: '4',
+  /** 自定义：`RoleDept` 指定的部门。 */
+  CUSTOM: '5',
 } as const;
 
 /** 解析结果：查询层可直接消费的范围条件。 */
@@ -35,6 +41,7 @@ export type DataScopeFilter =
   | {
       readonly kind: 'limited';
       readonly deptIds: readonly string[];
+      /** "本人"分支的归属人 ID；本次请求没有"仅本人"角色时为 null。 */
       readonly selfUserId: string | null;
     };
 
@@ -45,32 +52,33 @@ export interface DataScopeSubject {
   readonly dataScopes: readonly RoleScope[];
 }
 
-/** 范围声明里的部门归属列与归属人列；模型没有对应列时省略。 */
+/** 范围声明里的归属列；模型没有对应列时省略。 */
 export interface DataScopeColumns {
   /** 部门归属列，如 `User.deptId`、`Dept.deptId`。 */
   readonly dept?: string;
-  /** 归属人列，如 `createBy`。 */
-  readonly owner?: string;
+  /**
+   * "本人"归属列，存的是记录所属的用户 ID。
+   *
+   * 只有 `User` 有这种列（`userId`）；部门/岗位/菜单/角色没有，
+   * 因此这些模型上的"仅本人"会退化成空范围，而不是静默放行。
+   */
+  readonly self?: string;
 }
 
 /** 该范围集合是否需要"本部门及以下"的部门子树。 */
 export function needsDeptAndChild(scopes: readonly RoleScope[]): boolean {
-  return scopes.some(
-    (scope) =>
-      scope.dataScope === DATA_SCOPE.DEPT_AND_CHILD ||
-      scope.dataScope === DATA_SCOPE.DEPT_AND_CHILD_OR_SELF,
-  );
+  return scopes.some((scope) => scope.dataScope === DATA_SCOPE.DEPT_AND_CHILD);
 }
 
 /**
  * 把多个角色的数据范围合并成一份并集条件。
  *
- * 规则与 Java 一致：
+ * 规则：
  * - 任一有效角色为 `1`（全部）即不受限；
- * - `2` 只取 `RoleDept` 明确指定的部门，**不自动展开下级**（Java 的 `getRoleCustom` 同样不展开）；
- * - `3` 只取当前部门；`4`/`6` 取当前部门及全部后代（由调用方传入）；
- * - `5`/`6` 追加"本人"分支；
- * - 用户没有部门时，`3`/`4`/`6` 不贡献部门条件；
+ * - `5` 只取 `RoleDept` 明确指定的部门，**不自动展开下级**；
+ * - `2` 只取当前部门；`3` 取当前部门及全部后代（由调用方传入）；
+ * - `4` 追加"本人"分支，落到 `DataScopeColumns.self` 上；
+ * - 用户没有部门时，`2`/`3` 不贡献部门条件；
  * - 合并后既无部门也无本人 → 空范围（拒绝），不退化成全量。
  *
  * 未知范围码按配置错误处理并拒绝访问（Java 抛 `ServiceException`，这里抛 403，失败关闭）。
@@ -99,10 +107,6 @@ export function resolveDataScope(
       case DATA_SCOPE.SELF:
         selfUserId = subject.userId;
         break;
-      case DATA_SCOPE.DEPT_AND_CHILD_OR_SELF:
-        for (const deptId of deptAndChild) deptIds.add(deptId);
-        selfUserId = subject.userId;
-        break;
       default:
         throw new ForbiddenException(`角色 ${scope.roleId} 的数据范围配置异常`);
     }
@@ -114,7 +118,7 @@ export function resolveDataScope(
 /**
  * 解析当前用户的数据范围，必要时查询部门子树。
  *
- * 超管直接不受限，不产生任何额外查询；只有 `4`/`6` 才会读 `Dept.ancestors`。
+ * 超管直接不受限，不产生任何额外查询；只有 `3`（本部门及以下）才会读 `Dept.ancestors`。
  */
 export async function loadDataScope(
   prisma: Pick<PrismaService, 'dept'>,
@@ -166,9 +170,12 @@ export function isDeptInScope(filter: DataScopeFilter, deptId: string | null): b
  * `kind: 'none'` 生成 `IN ()` 恒假条件：宁可查不到，也不能退化成全量。
  *
  * 读写使用同一份并集条件——"只能改自己能看到的"。
- * 这与 Java 在 UPDATE/DELETE 上用 `AND` 串接各角色条件的做法不同：多角色时 Java 会要求
- * 记录同时满足所有角色的范围（部门角色 + 本人角色 → 必须是本部门且本人创建），
+ * 与 Java 在 UPDATE/DELETE 上用 `AND` 串接各角色条件的做法不同：多角色时 Java 会要求
+ * 记录同时满足所有角色的范围（部门角色 + 本人角色 → 必须是本部门且本人），
  * 比"可见即可改"更严，也更容易把合法操作挡掉。此处按可见范围收敛。
+ *
+ * 模型没有 `self` 列时，"本人"分支不生成；若最终一个分支都没有（例如部门/岗位上的"仅本人"），
+ * 退化成恒假条件。
  */
 export function withDataScope<T>(
   where: T,
@@ -181,12 +188,12 @@ export function withDataScope<T>(
     if (columns.dept !== undefined && filter.deptIds.length) {
       branches.push({ [columns.dept]: { in: filter.deptIds.map((deptId) => BigInt(deptId)) } });
     }
-    if (columns.owner !== undefined && filter.selfUserId !== null) {
-      branches.push({ [columns.owner]: BigInt(filter.selfUserId) });
+    if (columns.self !== undefined && filter.selfUserId !== null) {
+      branches.push({ [columns.self]: BigInt(filter.selfUserId) });
     }
   }
   if (!branches.length) {
-    const column = columns.dept ?? columns.owner;
+    const column = columns.dept ?? columns.self;
     if (column === undefined) throw new Error('数据范围缺少可用的归属列');
     branches.push({ [column]: { in: [] } });
   }

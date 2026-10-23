@@ -31,8 +31,8 @@ const postSelect = {
   updateTime: true,
 } satisfies Prisma.PostSelect;
 
-/** 岗位的数据归属：所属部门 + 创建人，对应 Java `SysPostMapper` 的 `dept_id` / `create_by`。 */
-const POST_SCOPE_COLUMNS = { dept: 'deptId', owner: 'createBy' } as const;
+/** 岗位的数据归属：所属部门。 */
+const POST_SCOPE_COLUMNS = { dept: 'deptId' } as const;
 
 /**
  * 岗位管理。
@@ -129,7 +129,6 @@ export class PostService {
             orderNum: body.orderNum,
             status: body.status,
             remark: body.remark,
-            createBy: BigInt(actor.userId),
           },
           select: postSelect,
         });
@@ -185,7 +184,6 @@ export class PostService {
             orderNum: body.orderNum,
             status: body.status,
             remark: body.remark,
-            updateBy: BigInt(actor.userId),
           },
           select: postSelect,
         });
@@ -209,7 +207,7 @@ export class PostService {
           throw new ConflictException('岗位已分配用户，不能删除');
         await tx.post.update({
           where: { postId },
-          data: { delFlag: '2', updateBy: BigInt(actor.userId) },
+          data: { delFlag: '2' },
         });
       },
       { isolationLevel: 'Serializable' },

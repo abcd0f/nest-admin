@@ -25,12 +25,8 @@ model User {
   loginIp            String?   @map("login_ip") @db.VarChar(128)
   /// 最后登录时间
   loginDate          DateTime? @map("login_date") @db.Timestamptz(6)
-  /// 创建者
-  createBy           BigInt?   @map("create_by")
   /// 创建时间
   createTime         DateTime  @default(now()) @map("create_time") @db.Timestamptz(6)
-  /// 更新者
-  updateBy           BigInt?   @map("update_by")
   /// 更新时间
   updateTime         DateTime? @updatedAt @map("update_time") @db.Timestamptz(6)
   /// 备注

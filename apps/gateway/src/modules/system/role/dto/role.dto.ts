@@ -104,11 +104,11 @@ export class AssignRoleMenusDto {
 }
 
 export class RoleDataScopeDto {
-  /** 1 全部、2 自定义、3 本部门、4 本部门及以下、5 本人、6 部门及以下或本人。 */
-  @IsIn(['1', '2', '3', '4', '5', '6'])
+  /** 1 全部、2 本部门、3 本部门及以下、4 仅本人、5 自定义。 */
+  @IsIn(['1', '2', '3', '4', '5'])
   dataScope!: string;
 
-  /** 仅 dataScope=2 使用且必须非空；其他范围须省略或传空数组。 */
+  /** 仅 dataScope=5（自定义）使用且必须非空；其他范围须省略或传空数组。 */
   @ValidateIf((_object, value) => value !== undefined)
   @IsArray()
   @ArrayMaxSize(1000)

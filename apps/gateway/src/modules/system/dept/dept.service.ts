@@ -26,8 +26,8 @@ const deptSelect = {
   updateTime: true,
 } satisfies Prisma.DeptSelect;
 
-/** 部门的数据归属：部门自身 + 创建人。 */
-const DEPT_SCOPE_COLUMNS = { dept: 'deptId', owner: 'createBy' } as const;
+/** 部门的数据归属：部门自身。 */
+const DEPT_SCOPE_COLUMNS = { dept: 'deptId' } as const;
 
 function checkedPath(ids: bigint[]): string {
   const path = `/${ids.join('/')}/`;
@@ -116,7 +116,6 @@ export class DeptService {
             leaderId: body.leaderId ? BigInt(body.leaderId) : null,
             status: body.status,
             remark: body.remark,
-            createBy: BigInt(actor.userId),
           },
           select: { deptId: true },
         });
@@ -183,7 +182,6 @@ export class DeptService {
             }
           }
         }
-        const audit = { updateBy: BigInt(actor.userId) };
         const updated = await tx.dept.update({
           where: { deptId },
           data: {
@@ -199,13 +197,12 @@ export class DeptService {
                   : BigInt(body.leaderId),
             status: body.status,
             remark: body.remark,
-            ...audit,
           },
           select: deptSelect,
         });
         for (const [childId, ancestors] of paths) {
           if (childId !== deptId)
-            await tx.dept.update({ where: { deptId: childId }, data: { ancestors, ...audit } });
+            await tx.dept.update({ where: { deptId: childId }, data: { ancestors } });
         }
         return updated;
       },
@@ -232,7 +229,7 @@ export class DeptService {
           throw new ConflictException('部门仍被角色数据范围引用');
         await tx.dept.update({
           where: { deptId },
-          data: { delFlag: '2', updateBy: BigInt(actor.userId) },
+          data: { delFlag: '2' },
         });
       },
       { isolationLevel: 'Serializable' },

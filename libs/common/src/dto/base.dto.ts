@@ -114,12 +114,6 @@ export class BaseEntityDto {
   createTime?: Date;
 
   /**
-   * 更新人
-   */
-  @Expose()
-  updateBy?: string;
-
-  /**
    * 更新时间
    */
   @Expose()

@@ -1,5 +1,3 @@
-import type { AuthenticatedUser } from '@app/auth';
-import { CurrentUser } from '@app/auth';
 import { Permission } from '@app/permission';
 import { Body, Controller, Delete, Get, Inject, Param, Post, Put } from '@nestjs/common';
 import { ApiBearerAuth } from '@nestjs/swagger';
@@ -29,11 +27,8 @@ export class MenuController {
   /** 创建目录、菜单或按钮，校验父链和权限码。 */
   @Post()
   @Permission('system:menu:add')
-  create(
-    @Body() body: CreateMenuDto,
-    @CurrentUser() actor: AuthenticatedUser,
-  ): Promise<MenuResponseDto> {
-    return this.service.create(body, actor);
+  create(@Body() body: CreateMenuDto): Promise<MenuResponseDto> {
+    return this.service.create(body);
   }
 
   /** 更新路由展示字段、权限码、状态或父节点，禁止循环及不兼容类型变更。 */
@@ -42,9 +37,8 @@ export class MenuController {
   update(
     @Param('id') id: bigint,
     @Body() body: UpdateMenuDto,
-    @CurrentUser() actor: AuthenticatedUser,
   ): Promise<MenuResponseDto> {
-    return this.service.update(id, body, actor);
+    return this.service.update(id, body);
   }
 
   /** 物理删除无子节点、无角色引用的菜单；Menu 没有逻辑删除字段。 */

@@ -28,12 +28,8 @@ model Menu {
   perms      String?  @db.VarChar(100)
   /// 菜单图标
   icon       String?  @db.VarChar(100)
-  /// 创建者
-  createBy   BigInt?  @map("create_by")
   /// 创建时间
   createTime DateTime @default(now()) @map("create_time") @db.Timestamptz(6)
-  /// 更新者
-  updateBy   BigInt?  @map("update_by")
   /// 更新时间
   updateTime DateTime? @updatedAt @map("update_time") @db.Timestamptz(6)
   /// 备注

@@ -4,7 +4,7 @@ import { AuthService } from '@app/auth';
 import { toDto, toPageDto } from '@app/common';
 import { BusinessException, isBigIntId } from '@app/core';
 import { paginate, PrismaService } from '@app/database';
-import { RESERVED_TENANT_ADMIN_ROLE_KEY, SUPER_ADMIN_ROLE_KEY } from '@app/permission';
+import { DATA_SCOPE, RESERVED_TENANT_ADMIN_ROLE_KEY, SUPER_ADMIN_ROLE_KEY } from '@app/permission';
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { DeptService } from '../dept/dept.service.js';
 import { MenuService } from '../menu/menu.service.js';
@@ -163,7 +163,7 @@ export class RoleService {
     return ids.filter((deptId) => !parents.has(deptId));
   }
 
-  async create(body: CreateRoleDto, actor: AuthenticatedUser) {
+  async create(body: CreateRoleDto) {
     this.assertRoleKeyAvailable(body.roleKey);
     const row = await this.prisma.$transaction(
       async (tx) => {
@@ -179,7 +179,6 @@ export class RoleService {
             menuCheckStrictly: body.menuCheckStrictly,
             deptCheckStrictly: body.deptCheckStrictly,
             remark: body.remark,
-            createBy: BigInt(actor.userId),
           },
           select: roleSelect,
         });
@@ -189,7 +188,7 @@ export class RoleService {
     return toDto(RoleResponseDto, { ...row, menuIds: [], deptIds: [] })!;
   }
 
-  async update(id: bigint, body: UpdateRoleDto, actor: AuthenticatedUser) {
+  async update(id: bigint, body: UpdateRoleDto) {
     const roleId = id;
     const row = await this.prisma.$transaction(
       async (tx) => {
@@ -221,7 +220,6 @@ export class RoleService {
             menuCheckStrictly: body.menuCheckStrictly,
             deptCheckStrictly: body.deptCheckStrictly,
             remark: body.remark,
-            updateBy: BigInt(actor.userId),
           },
           select: roleSelect,
         });
@@ -240,7 +238,7 @@ export class RoleService {
     })!;
   }
 
-  async assignMenus(id: bigint, body: AssignRoleMenusDto, actor: AuthenticatedUser) {
+  async assignMenus(id: bigint, body: AssignRoleMenusDto) {
     if (body.menuIds.some((menuId) => !isBigIntId(menuId))) {
       throw BusinessException.validation('菜单 ID 无效');
     }
@@ -263,11 +261,10 @@ export class RoleService {
         await tx.roleMenu.deleteMany({ where: { roleId } });
         if (menuIds.length)
           await tx.roleMenu.createMany({ data: menuIds.map((menuId) => ({ roleId, menuId })) });
-        return tx.role.update({
-          where: { roleId },
-          data: { updateBy: BigInt(actor.userId) },
-          select: roleSelect,
-        });
+        // 关联已整体替换，重新读一次拿到最新的 menus/depts 用于响应。
+        const updated = await tx.role.findFirst({ where: { roleId }, select: roleSelect });
+        if (!updated) throw new NotFoundException('角色不存在');
+        return updated;
       },
       { isolationLevel: 'Serializable' },
     );
@@ -280,7 +277,7 @@ export class RoleService {
     })!;
   }
 
-  async dataScope(id: bigint, body: RoleDataScopeDto, actor: AuthenticatedUser) {
+  async dataScope(id: bigint, body: RoleDataScopeDto) {
     if (body.deptIds?.some((deptId) => !isBigIntId(deptId))) {
       throw BusinessException.validation('部门 ID 无效');
     }
@@ -292,13 +289,14 @@ export class RoleService {
           select: { roleId: true },
         });
         if (!role) throw new NotFoundException('角色不存在');
-        if (body.dataScope === '2' && !body.deptIds?.length) {
+        const isCustom = body.dataScope === DATA_SCOPE.CUSTOM;
+        if (isCustom && !body.deptIds?.length) {
           throw BusinessException.validation('自定义数据范围必须选择部门');
         }
-        if (body.dataScope !== '2' && body.deptIds?.length) {
+        if (!isCustom && body.deptIds?.length) {
           throw BusinessException.validation('非自定义数据范围不能指定部门');
         }
-        const deptIds = body.dataScope === '2' ? [...new Set(body.deptIds)].map(BigInt) : [];
+        const deptIds = isCustom ? [...new Set(body.deptIds)].map(BigInt) : [];
         const depts = await tx.dept.findMany({
           where: { deptId: { in: deptIds }, status: '0', delFlag: '0' },
           select: { deptId: true },
@@ -311,10 +309,7 @@ export class RoleService {
           await tx.roleDept.createMany({ data: deptIds.map((deptId) => ({ roleId, deptId })) });
         return tx.role.update({
           where: { roleId },
-          data: {
-            dataScope: body.dataScope,
-            updateBy: BigInt(actor.userId),
-          },
+          data: { dataScope: body.dataScope },
           select: roleSelect,
         });
       },
@@ -327,7 +322,7 @@ export class RoleService {
     })!;
   }
 
-  async remove(id: bigint, actor: AuthenticatedUser): Promise<void> {
+  async remove(id: bigint): Promise<void> {
     const roleId = id;
     await this.prisma.$transaction(
       async (tx) => {
@@ -342,7 +337,7 @@ export class RoleService {
         await tx.roleDept.deleteMany({ where: { roleId } });
         await tx.role.update({
           where: { roleId },
-          data: { delFlag: '2', updateBy: BigInt(actor.userId) },
+          data: { delFlag: '2' },
         });
       },
       { isolationLevel: 'Serializable' },
