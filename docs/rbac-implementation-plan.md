@@ -172,7 +172,7 @@
 
 管理列表直接将 `this.prisma.user` / `this.prisma.role` 传给 `paginate(this.prisma.<model>, { ...query, where })`；关联集合在分页后单独查询。公共树组装导出自 `libs/common/src/utils`。响应统一经 `toDto`、`toDtoList` 或 `toPageDto` 映射到逐字段 `@Expose()` 的 DTO，BigInt ID 使用 `@Type(() => String)`，日期使用 `@DateFormat()`；业务模块内不再设置共享 RBAC 服务目录或通用资源/响应包装方法。
 
-### 阶段 6：落实数据范围到业务查询
+### 阶段 6：落实数据范围到业务查询（已完成）
 
 1. 在 `libs/permission` 提供数据范围解析器，输入当前用户及有效角色，输出业务查询可组合的用户 ID/部门 ID 条件或等价的受限谓词。
 2. 为需要隔离的数据列表、详情、更新、删除接口逐个接入条件；写操作必须同时验证目标记录在当前范围内，避免只过滤列表。
@@ -181,6 +181,8 @@
 5. 为范围边界编写测试：本部门/子部门/其他部门/本人/他人、多个角色、无部门用户及自定义部门。
 
 **验收：** 相同接口对不同数据范围用户返回和修改的数据严格受限，直接通过 ID 访问不能绕过范围条件。
+
+阶段 6 已交付 `libs/permission/src/data-scope.ts`（`resolveDataScope` / `loadDataScope` / `withDataScope` / `isDeptInScope`），并在用户、部门、角色的部门树查询中接入。与 Java 的差异（写操作使用并集而非 AND、数据范围不进会话快照、角色列表因缺 `create_dept` 列未接入）见[阶段 6 数据范围说明](./rbac-phase6-data-scope.md)。
 
 ### 阶段 7：全链路验证、文档与交付
 

@@ -66,7 +66,16 @@ function setup(
     new PermissionService({ getAuthorization: source } as never),
   );
   const request: { user?: AuthenticatedUser } = {
-    user: { userId: '1', userName: 'alice', nickName: 'Alice', deptId: null, sessionId: 'sid', roles, permissions },
+    user: {
+      userId: '1',
+      userName: 'alice',
+      nickName: 'Alice',
+      deptId: null,
+      sessionId: 'sid',
+      roles,
+      permissions,
+      dataScopes: [],
+    },
   };
   const context = new ExecutionContextHost([request], controller, controller.prototype[method]);
   return { guard, context, request, source };

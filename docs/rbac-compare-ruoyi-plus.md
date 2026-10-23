@@ -16,12 +16,12 @@
 | --- | --- | --- | --- |
 | 权限判定入口 | 208 处 `@SaCheckPermission` 注解 + Sa-Token 拦截器 | 1 个全局 `PermissionGuard` + 25 处 `@Permission` 注解 | 同为注解式，nest 表达力更强（AND/OR/角色兜底） |
 | 权限载体 | `LoginUser` 对象存 Sa-Token Token-Session（内存 + Redis 持久化） | Redis 里显式序列化的 `AuthSession{roles,permissions}` 快照 | 语义相同，实现不同 |
-| **数据权限** | **MyBatis-Plus 拦截器 + JSqlParser 改写 SQL**，6 种范围全自动 | **只在表里存配置，查询层完全不生效** | **最大架构缺口** |
+| **数据权限** | MyBatis-Plus 拦截器 + JSqlParser **改写 SQL**，6 种范围全自动 | Prisma `where` 条件构造器（`libs/permission/src/data-scope.ts`），6 种范围显式接入 | 语义对齐，执行方式不同 |
 | 多租户 | `tenant_id` 列 + 租户行拦截器自动拼 `WHERE` + 租户套餐 | 无（表里连 `tenant_id` 都没有） | 按需求有意裁剪 |
 | 权限变更生效 | 遍历**全部在线 token** 匹配后踢人 | 按 `auth:user:{id}` 索引**精确撤销**该用户会话 | nest 更高效，且覆盖菜单变更 |
 | 分层方式 | `ruoyi-common-*` starter 自动装配 | `libs/*` 显式 Module + `apps/gateway` 业务模块 | 框架生态差异 |
 
-一句话总结：**RuoYi 的 RBAC = 功能权限（注解）+ 数据权限（SQL 改写）+ 租户隔离（SQL 改写），三层都在框架层自动完成；nest-admin 目前只完整实现了第一层，第二层只有配置入口没有执行器，第三层按需求移除。**
+一句话总结：**RuoYi 的 RBAC = 功能权限（注解）+ 数据权限（SQL 改写）+ 租户隔离（SQL 改写），三层都在框架层自动完成；nest-admin 实现了前两层（第二层靠条件构造器而非 SQL 改写），第三层按需求移除。**
 
 ---
 
@@ -69,7 +69,7 @@ libs/
 
 | 表 | RuoYi-Vue-Plus | nest-admin | 差异 |
 | --- | --- | --- | --- |
-| `sys_user` | 有 `tenant_id`、`create_dept` | 无 `tenant_id`，有 `create_dept` | 租户字段裁掉 |
+| `sys_user` | 有 `tenant_id`、`create_dept` | 无 `tenant_id`、**无 `create_dept`**（已移除，见 2.2） | 租户字段裁掉；死字段清理 |
 | `sys_role` | `tenant_id`、`role_sort`、`data_scope`(默认 `'1'`)、`menu_check_strictly`、`dept_check_strictly` | `order_num`、`data_scope`(**默认 `'5'`**)、`menu_check_strictly`、`dept_check_strictly` | 默认数据范围不同 |
 | `sys_menu` | 无 `del_flag`、有 `create_dept`、`query_param` | 无 `del_flag`、有 `query`、无 `create_dept` | 字段改名 |
 | `sys_dept` | `tenant_id`、`dept_category`、`leader`/`phone`/`email` | `leader_id`，无 `dept_category`/`phone`/`email` | 精简 |
@@ -77,11 +77,12 @@ libs/
 | `sys_user_role` / `sys_role_menu` / `sys_role_dept` | 有 | 有（复合主键 + `onDelete: Cascade`） | 一致 |
 | 租户套餐 | `sys_tenant_package`（`menu_ids` 字符串） | 无 | 无租户 |
 
-### 2.2 语义差异（容易踩坑的三处）
+### 2.2 语义差异（容易踩坑的四处）
 
-1. **`data_scope` 默认值不同**：RuoYi 建角色默认 `'1'`（全部数据），nest 默认 `'5'`（仅本人）。nest 走的是"默认最小权限"，但因为没有执行器，这个差异目前只体现在接口返回值上。
+1. **`data_scope` 默认值不同**：RuoYi 建角色默认 `'1'`（全部数据），nest 默认 `'5'`（仅本人）。nest 走"默认最小权限"，新建角色立刻就是"只看自己"，需要显式放开——迁移历史角色时要逐条核对，别以为默认值和 Java 一样。
 2. **`del_flag` 取值不同**：RuoYi 是 `'0'` 存在 / `'1'` 删除；nest 逻辑删除写 `'2'`（见 `user.service.ts` 的 `delFlag: '2'`），判定仍是 `!== '0'` 即无效。跨系统导数据时要注意。
 3. **`sys_menu` 没有 `del_flag`**：两边一致，菜单只能物理删除或停用。nest 的 `menu.service.ts` 因此对菜单权限码的过滤条件只有 `status === '0'`。
+4. **`sys_user.create_dept` 已移除**（2026-10-23）：这一列在 Java 里是数据权限锚点（`SysRoleMapper` 用 `create_dept` 过滤角色可见范围），但 nest 侧只有 `User` 有它、且只写不读，用户表的部门归属本来就用 `dept_id`。移除后角色列表无法按部门过滤，原因见 5.4。
 
 ---
 
@@ -134,9 +135,9 @@ export interface AuthSession extends AuthSnapshot {
 | 多设备会话 | 支持（按 device 区分 loginId） | 支持（每次登录一个 `sid`） |
 | Refresh 轮换 | Sa-Token 内建 | 手写 Lua 原子轮换 + 重放即撤销会话（`ROTATE_REFRESH_TOKEN`） |
 | 登出粒度 | 当前 token | 当前 `sid`（其他设备不受影响） |
-| 权限数据载体 | `LoginUser` 对象（含 dataScope） | `AuthSession` 快照（**只有 roleKey 和权限码**） |
+| 权限数据载体 | `LoginUser` 对象（含 dataScope） | `AuthSession` 快照（roleKey + 权限码）+ `dataScopes`（请求期实时加载） |
 
-**这是两个项目最本质的分歧点之一**：RuoYi 把 `dataScope` 一起放进会话，所以 SQL 改写层能直接拿到；nest 的快照为了最小化，只留了判定功能权限所需的两样东西，数据权限因此失去了运行期输入。
+会话快照只装功能权限，数据范围不走快照而是每次请求随用户加载（见 5.3）。两者分开的理由是成本：菜单 join 贵，值得用快照换；角色 + `RoleDept` 便宜，实时读更准。
 
 ### 3.3 请求期校验
 
@@ -218,7 +219,7 @@ RuoYi 还有一个 nest 没有的概念：**租户管理员**（`roleKey == 'adm
 
 ---
 
-## 5. 数据权限对比 —— 核心差距
+## 5. 数据权限对比 —— 同语义、不同执行方式
 
 ### 5.1 RuoYi：SQL 改写，全自动
 
@@ -262,37 +263,53 @@ default Page<SysUserVo> selectPageUserList(Page<SysUser> page, Wrapper<SysUser> 
 - **`DataPermissionHelper.ignore()`**：显式绕过。用于"查自己"的场景，比如 `SysUserController.getInfo` 里 `DataPermissionHelper.ignore(() -> userService.selectUserById(...))`，否则 5 号范围用户查自己会被过滤掉。
 - **操作级校验**：`checkUserDataScope(userId)` / `checkRoleDataScope(roleId)` 用带数据权限的 `count` 查询判断目标记录是否在范围内，防"列表看不到但按 ID 能改"。这是列表过滤之外的第二道闸。
 
-### 5.2 nest-admin：只有配置，没有执行器
+### 5.2 nest-admin：条件构造器，显式接入
 
-现状（可验证）：
+Prisma 没有 MyBatis 那种 SQL 拦截点，所以不做 SQL 改写，改成**产出可组合的 `where` 片段**，由 service 显式合入（`libs/permission/src/data-scope.ts`）：
 
-- `Role.dataScope` 字段存在，`role.service.ts:297 dataScope()` 能完整维护 `dataScope` + `RoleDept` 关联，校验也很严（`'2'` 必须有部门、非 `'2'` 必须为空、部门必须有效）。
-- `role.dto.ts` 有 `RoleDataScopeDto`，控制器有 `PATCH /system/roles/:id/data-scope`。
-- **但没有任何查询读取 `dataScope`**。全仓库 `grep dataScope` 只命中 role 模块的 DTO/Service 和测试。
-- `user.service.ts:findAll()` 的 `where` 只有 `delFlag/status/userName/deptId`，`deptId` 是**查询参数**（用户自己传的筛选条件），不是权限约束。
-- `AuthSession` 里没有 `dataScope`，运行期拿不到角色的数据范围。
+| 能力 | 函数 | 作用 |
+| --- | --- | --- |
+| 解析 | `resolveDataScope(subject, deptAndChild)` | 纯函数：多角色范围 → `{kind:'all' \| 'none' \| 'limited'}` |
+| 加载 | `loadDataScope(prisma, subject)` | 超管短路；仅 `4`/`6` 才查 `Dept.ancestors` 子树 |
+| 合入 | `withDataScope(where, filter, columns)` | 用 `AND` 包住原条件，不覆盖已有 `OR` |
+| 写入校验 | `isDeptInScope(filter, deptId)` | 创建时校验目标部门，越权 403 |
 
-`docs/rbac-implementation-plan.md` 的阶段 6「落实数据范围到业务查询」**尚未实施**，`docs/rbac-phase5-admin-api.md` 也明确写了"此阶段提供范围配置，不将范围过滤静默应用到没有业务归属字段的模型"。
+已接入的查询：
 
-**风险**：现在任何一个持有 `system:user:list` 权限的用户，都能看到全库用户。数据范围只是 UI 上的一个摆设。如果这个项目要对标 RuoYi 的能力，这是必须补的一块。
+| 服务 | 方法 | 归属列 |
+| --- | --- | --- |
+| `UserService` | `findAll` / `findOne` / `update` / `assignRoles` / `remove` / `create` | `deptId` + `createBy` |
+| `DeptService` | `findAll` / `findOne` / `update` / `remove` / `create` | `deptId` + `createBy` |
+| `RoleService` | `deptTreeSelect`（转调 `DeptService.findAll`） | 同上 |
 
-### 5.3 若要补齐，建议的落地路径
+三个实现要点：
 
-按 Nest + Prisma 的技术特点，不要照搬 SQL 改写（Prisma 没有 MyBatis 那种拦截点），建议改成**查询条件构造器**：
+1. **范围条件用 `AND` 包住原 `where`**，不展开字段——否则会覆盖调用方已有的 `OR`（关键字搜索），把范围变成"或"的一部分。
+2. **范围外按 404 处理**，不区分"没有这条"和"看不到这条"，避免探测。
+3. **部门树被裁掉父节点时把可见节点重挂到根**；未受限时保持原样，缺父节点仍按数据损坏报 409。
 
-1. 在 `libs/permission` 加 `DataScopeResolver`：
-   - 输入：`userId`、`deptId`、`roles[{roleId, dataScope}]`（需扩 `AuthSession` 或按需查库）
-   - 输出：`{ deptIds?: bigint[], userIds?: bigint[], unrestricted: boolean }`
-2. 六种范围映射成 Prisma `where`：
-   - `1` → `{}`（不附加）
-   - `2` → `{ deptId: { in: customDeptIds } }`
-   - `3` → `{ deptId }`
-   - `4` → `{ deptId: { in: descendants } }`（用 `Dept.ancestors` 前缀匹配，注意 `/1/2/` 这种带边界的分隔符，别用 `startsWith` 裸拼）
-   - `5` → `{ createBy: userId }`
-   - `6` → `{ OR: [{ deptId: { in: descendants } }, { createBy: userId }] }`
-3. 多角色并集：任一角色 `1` 直接放开；否则各角色条件 `OR` 合并。
-4. **写操作单独校验**：`findFirst({ where: { id, ...scopeWhere } })` 查不到就 404，别只过滤列表。
-5. 没有归属字段的模型，显式拒绝该范围（对应 RuoYi 的 `elseSql = '1 = 0'`），不要静默跳过。
+与 Java 一样，空范围、未知范围码一律失败关闭：前者生成 `IN ()` 恒假条件，后者抛 403。Java 在多角色为空时是**不加条件**（fail open），这里没有照抄。
+
+### 5.3 数据范围为什么没进会话快照
+
+功能权限走"登录快照 + 变更踢人"，数据范围**没跟着走**：它在 `AuthService.loadUser` 里随用户一起加载（每次请求），落在 `AuthenticatedUser.dataScopes`。
+
+| 项 | RuoYi | nest-admin |
+| --- | --- | --- |
+| 载体 | `LoginUser.roles[].dataScope` | `AuthenticatedUser.dataScopes` |
+| 时机 | 登录时算一次 | 每次请求随用户加载 |
+| 变更生效 | 需重新登录 | 立即生效 |
+| 是否踢人 | 否（`/dataScope` 端点不调 `cleanOnlineUserByRole`） | 不需要 |
+
+理由：功能权限要 join 角色→菜单，成本高才值得用快照换性能；数据范围只需要角色和 `RoleDept`，挂在已有的用户查询上几乎零成本。顺带修掉了 Java 的陈旧快照问题——那边改完角色数据范围，已登录用户手里的 `LoginUser` 还是旧值，直到重新登录。
+
+### 5.4 与 Java 的两处有意偏离
+
+**写操作使用并集，不是 AND 串接。** Java `buildDataFilter` 在 UPDATE/DELETE 时用 `AND` 串接每个角色、每一列的模板条件。多角色下会变成"必须同时满足所有角色的范围"：角色 A 本部门 + 角色 B 仅本人 → 记录必须既是本部门又是我创建的才能改。用户能看见、合法属于自己的数据却改不了。本项目按"**可见即可改**"处理，读写共用同一份并集条件，安全边界不变。
+
+**`Role` / `Menu` 未接入。** Prisma `Role` 没有 `createDept` 列（Java 的 `sys_role` 有），只按 `createBy` 过滤会把"本部门"范围的角色全部挡掉；`Menu` 是全局配置无部门归属；`Post` 表存在但没有 service。要完整对齐 Java 的角色列表过滤，需要给 `sys_role` 加 `create_dept` 列并回填数据，属于独立的 schema 变更。
+
+注意别把它加到 `User` 上：`sys_user.create_dept` 已于 2026-10-23 移除（只写不读）。真要补角色范围，加在 `sys_role` 才是对的——那是 Java 原本的用法。
 
 ---
 
@@ -355,7 +372,7 @@ async revokeUser(userId: string): Promise<number> {
   - 角色状态/roleKey/菜单集合变更 → `revokeSessions(auth, usersOfRole(roleId))`
   - **菜单变更 → `revokeSessions(auth, usersOfMenu(menuId))`**（`menu.service.ts:174`，菜单→角色→用户三段查）
 - 失败策略：业务事务已提交，踢人失败只 `logger.warn`，不让调用方看到 500 后重试（`revokeSessions` 的 try/catch）。
-- **不覆盖**：部门变更（`dept.service.ts` 无 `revokeSessions`）。因为数据范围没落地，部门变更目前不影响任何权限判定，所以这个缺口暂时无害——但一旦补上阶段 6，部门树变更必须同步踢人。
+- **不覆盖**：部门变更（`dept.service.ts` 无 `revokeSessions`）。这是对的：数据范围在请求期按 `Dept.ancestors` 实时解析子树，部门层级一变，下一次查询就用新结构，不需要踢人。会话里只存了功能权限和 `RoleDept` 的部门 ID，前者与部门无关，后者不受层级影响。
 
 ### 7.3 结论
 
@@ -369,7 +386,7 @@ nest 的"按用户索引 + 覆盖菜单变更"在正确性和性能上都优于 
 | --- | --- | --- |
 | 装配方式 | Spring Boot Starter 自动装配（`@AutoConfiguration`），加依赖即生效 | Nest Module 显式 import，依赖关系在代码里可见 |
 | 权限判定位置 | 分散：Controller 注解 + Service `checkXxx` 方法 + Mapper 注解 + Interceptor | 集中：`PermissionGuard` 一个入口，业务只写注解 |
-| 数据权限位置 | Mapper 注解 + 全局拦截器（跨层） | 不存在 |
+| 数据权限位置 | Mapper 注解 + 全局拦截器（跨层） | service 内显式合入 `where`（同层） |
 | 会话实现 | Sa-Token 框架托管（`StpUtil` 静态调用） | 自研 `SessionStore`，Redis 操作显式可见 |
 | 超管判定 | `LoginHelper.isSuperAdmin()` 静态工具 | `isSuperAdmin(userId)` 纯函数 |
 | 权限码常量 | 散落在注解字符串里 | 同样散落在注解字符串里（`@Permission('system:user:list')`） |
@@ -396,8 +413,8 @@ RuoYi 的优势在于**能力密度**：一个注解就把 SQL 改了，业务�
 | 角色-菜单分配 | ✅ | ✅ | 都实现了 `menuCheckStrictly` 父节点裁剪 |
 | 角色-部门（自定义范围） | ✅ | ✅（仅存储） | 存了不用 |
 | 功能权限判定 | ✅ | ✅ | |
-| **数据权限判定** | ✅ SQL 改写 | ❌ | 阶段 6 未实施 |
-| 数据权限操作级校验 | ✅ `checkUserDataScope` | ❌ | 按 ID 越权无防护 |
+| **数据权限判定** | ✅ SQL 改写 | ✅ `where` 构造器 | 阶段 6 已交付 |
+| 数据权限操作级校验 | ✅ `checkUserDataScope` | ✅ 范围条件进存在性判断 | 越权按 404 处理 |
 | 多租户 | ✅ | ❌（按需求移除） | |
 | 租户套餐 | ✅ | ❌ | |
 | 操作日志 | ✅ 132 处 `@Log(title=...)` + 异步落库 | ❌ 仅 `OperLog` model | 无 AOP/拦截器写入 |
@@ -418,8 +435,8 @@ RuoYi 的优势在于**能力密度**：一个注解就把 SQL 改了，业务�
 
 按优先级排序，只列有实际影响的：
 
-1. **补数据权限执行器（P0）**。当前状态是"配了不生效"，比"没有这个功能"更危险——管理员会以为限制了，实际没有。要么实现阶段 6，要么在接口层直接隐藏 `data-scope` 端点并标注"未启用"，别留半成品。
-2. **补操作级数据权限校验（P0，随 1 一起）**。对应 RuoYi 的 `checkUserDataScope`。列表过滤挡不住按 ID 直接访问。
+1. ~~补数据权限执行器~~ 已完成，见 `docs/rbac-phase6-data-scope.md`。
+2. ~~补操作级数据权限校验~~ 已完成：详情/更新/删除/分配角色都带范围条件，越权返回 404；创建校验目标部门。
 3. **补岗位模块或删表（P1）**。`sys_post` 和 `UserPost` 现在是死数据，`LoginUser` 在 Java 侧是带 `posts` 的。要么接入，要么在文档里标明"预留"。
 4. **补操作日志（P1）**。`OperLog`/`LoginLog` 两个 model 空转，合规审计场景会卡住。Nest 里用 Interceptor + `@Log()` 装饰器实现，比 Spring AOP 更简单。
 5. **补登录失败锁定（P2）**。`dummyHash` 只防枚举，不防爆破；`ThrottlerGuard` 是全局限流，不能替代按账号计数。
@@ -443,10 +460,11 @@ RuoYi 的优势在于**能力密度**：一个注解就把 SQL 改了，业务�
 | 公开接口 | `@SaIgnore` / `SecurityProperties.excludes` | `@Public()` |
 | 登录校验 | `StpUtil.checkLogin()` | `AuthGuard` |
 | 权限校验 | Sa-Token AOP | `PermissionGuard` |
-| 数据权限声明 | `@DataPermission` + `@DataColumn` | ❌ |
-| 数据权限执行 | `PlusDataPermissionInterceptor`（JSqlParser） | ❌ |
-| 数据范围枚举 | `DataScopeType`（6 种 + SpEL 模板 + elseSql） | 只有 `Role.dataScope` 字符串 |
-| 绕过数据权限 | `DataPermissionHelper.ignore()` | ❌ |
+| 数据权限声明 | `@DataPermission` + `@DataColumn` | `loadDataScope` + `withDataScope`（service 内） |
+| 数据权限执行 | `PlusDataPermissionInterceptor`（JSqlParser） | Prisma `where` 条件 |
+| 数据范围枚举 | `DataScopeType`（6 种 + SpEL 模板 + elseSql） | `DATA_SCOPE`（6 种 + 条件构造） |
+| 数据范围载体 | `LoginUser.roles[].dataScope`（登录快照） | `AuthenticatedUser.dataScopes`（每次请求实时读） |
+| 绕过数据权限 | `DataPermissionHelper.ignore()` | 不调用即不受限 |
 | 租户隔离 | `PlusTenantLineHandler` | ❌ |
 | 会话存储 | Sa-Token Token-Session | Redis `auth:session:{sid}` |
 | 踢人 | `cleanOnlineUser`（扫全量 token） | `revokeUserSessions`（按用户索引） |

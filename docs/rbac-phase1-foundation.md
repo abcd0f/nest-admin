@@ -8,7 +8,7 @@
 
 | 模型       | 主键/关系                                                             | RBAC 使用方式及限制                                                                                                                                |
 | ---------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `User`     | `userId` 为 BigInt；`dept`、`roles: UserRole[]`、`posts: UserPost[]`  | 登录按 `userName` 查询，凭据字段为 `password`；`deptId` 可空。`createBy`、`createDept` 是审计来源，不能和当前所属 `deptId` 混为一谈。              |
+| `User`     | `userId` 为 BigInt；`dept`、`roles: UserRole[]`、`posts: UserPost[]`  | 登录按 `userName` 查询，凭据字段为 `password`；`deptId` 可空。`createBy` 是审计来源，不能和当前所属 `deptId` 混为一谈。（`createDept` 已于 2026-10-23 移除：只写不读，数据权限用 `deptId`。）              |
 | `Role`     | `roleId` 为 BigInt；`users`、`menus: RoleMenu[]`、`depts: RoleDept[]` | `roleKey` 是角色标识，`dataScope` 字符范围为 `1` 至 `6`，缺省 `5`。                                                                                |
 | `Menu`     | `menuId` 为 BigInt；`roles: RoleMenu[]`                               | `parentId=0` 为根；没有自关联外键，没有 `delFlag`。`menuType` 为 `M/C/F`；`perms` 可空、最长 100 字符；`visible` 只控制显示，不代表撤销 API 权限。 |
 | `Dept`     | `deptId` 为 BigInt；`users`、`roleDepts`                              | `parentId=0` 为根；没有父部门自关联外键。`ancestors` 为含自身路径，最长 512 字符，schema 缺省 `/` 不能证明已有层级路径符合规范。                   |

@@ -53,6 +53,7 @@ function fixture() {
         deptId: 2n,
         status: '0',
         delFlag: '0',
+        roles: [],
       }),
     },
   };
@@ -84,6 +85,8 @@ describe('jWT 与会话认证', () => {
       sessionId: claims.sid,
       roles: ['operator'],
       permissions: ['system:user:list', '*:*:*'],
+      // 数据范围随用户实时加载，不进会话快照。
+      dataScopes: [],
     });
     expect(sessions.create.mock.calls[0][1]).toMatchObject({
       userId: '1',
@@ -93,7 +96,20 @@ describe('jWT 与会话认证', () => {
     expect(sessions.create.mock.calls[0][1].refreshHash).toMatch(/^[a-f0-9]{64}$/);
     expect(JSON.stringify(sessions.create.mock.calls)).not.toContain(pair.refreshToken);
     expect(prisma.user.findUnique.mock.calls[0][0].select).not.toHaveProperty('password');
-    expect(prisma.user.findUnique.mock.calls[0][0].select).not.toHaveProperty('roles');
+    // 只读角色和自定义部门用于数据范围，不读菜单（功能权限走登录快照）。
+    expect(prisma.user.findUnique.mock.calls[0][0].select.roles).toEqual({
+      select: {
+        role: {
+          select: {
+            roleId: true,
+            dataScope: true,
+            status: true,
+            delFlag: true,
+            depts: { select: { deptId: true } },
+          },
+        },
+      },
+    });
   });
 
   it.each([null, { status: '1', delFlag: '0' }, { status: '0', delFlag: '2' }])(

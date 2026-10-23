@@ -1,3 +1,4 @@
+export * from './data-scope.js';
 export * from './permission.constants.js';
 export * from './permission.decorator.js';
 export * from './permission.guard.js';

@@ -22,15 +22,21 @@ export class UserController {
   /** 分页查询未删除用户，不返回密码或内部登录信息。 */
   @Get()
   @Permission('system:user:list')
-  findAll(@Query() query: UserQueryDto): Promise<UserPageDto> {
-    return this.service.findAll(query);
+  findAll(
+    @Query() query: UserQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<UserPageDto> {
+    return this.service.findAll(query, actor);
   }
 
   /** 查询用户资料和已关联角色。 */
   @Get(':id')
   @Permission('system:user:query')
-  findOne(@Param('id') id: string): Promise<UserResponseDto> {
-    return this.service.findOne(id);
+  findOne(
+    @Param('id') id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<UserResponseDto> {
+    return this.service.findOne(id, actor);
   }
 
   /** 创建用户；分配角色使用独立的 assignRoles 权限。 */

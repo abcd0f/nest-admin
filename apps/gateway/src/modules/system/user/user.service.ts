@@ -5,7 +5,14 @@ import { toDto, toPageDto } from '@app/common';
 import { BusinessException } from '@app/core';
 import { PasswordHashService } from '@app/crypto';
 import { paginate, PrismaService } from '@app/database';
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { isDeptInScope, loadDataScope, withDataScope } from '@app/permission';
+import {
+  ConflictException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { revokeSessions } from '../session-invalidation.js';
 import { assertNotSuperAdmin } from '../super-admin.js';
 import {
@@ -31,6 +38,9 @@ const userSelect = {
   roles: { select: { roleId: true }, orderBy: { roleId: 'asc' } },
 } satisfies Prisma.UserSelect;
 
+/** 用户的数据归属：部门 + 创建人，对应 Java `@DataColumn(deptName→dept_id, userName→create_by)`。 */
+const USER_SCOPE_COLUMNS = { dept: 'deptId', owner: 'createBy' } as const;
+
 @Injectable()
 export class UserService {
   constructor(
@@ -39,16 +49,21 @@ export class UserService {
     @Inject(AuthService) private readonly auth: AuthService,
   ) {}
 
-  async findAll(query: UserQueryDto) {
+  async findAll(query: UserQueryDto, actor: AuthenticatedUser) {
     if (query.deptId !== undefined && !isUserId(query.deptId)) {
       throw BusinessException.validation([{ field: 'deptId', messages: ['部门 ID 无效'] }]);
     }
-    const where: Prisma.UserWhereInput = {
-      delFlag: '0',
-      status: query.status,
-      userName: query.userName === undefined ? undefined : { contains: query.userName },
-      deptId: query.deptId === undefined ? undefined : BigInt(query.deptId),
-    };
+    // 数据范围按角色 dataScope 收敛到可见部门/本人，再叠加用户自己传的筛选条件。
+    const where = withDataScope<Prisma.UserWhereInput>(
+      {
+        delFlag: '0',
+        status: query.status,
+        userName: query.userName === undefined ? undefined : { contains: query.userName },
+        deptId: query.deptId === undefined ? undefined : BigInt(query.deptId),
+      },
+      await loadDataScope(this.prisma, actor),
+      USER_SCOPE_COLUMNS,
+    );
     const page = await paginate(this.prisma.user, { ...query, where });
     const roles = await this.prisma.userRole.findMany({
       where: { userId: { in: page.items.map((row) => row.userId) } },
@@ -64,11 +79,16 @@ export class UserService {
     });
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, actor: AuthenticatedUser) {
     if (!isUserId(id))
       throw BusinessException.validation([{ field: 'id', messages: ['用户 ID 无效'] }]);
     const row = await this.prisma.user.findFirst({
-      where: { userId: BigInt(id), delFlag: '0' },
+      // 越权访问按"不存在"处理，不区分"没有这条"和"看不到这条"。
+      where: withDataScope(
+        { userId: BigInt(id), delFlag: '0' },
+        await loadDataScope(this.prisma, actor),
+        USER_SCOPE_COLUMNS,
+      ),
       select: userSelect,
     });
     if (!row) throw new NotFoundException('用户不存在');
@@ -81,6 +101,10 @@ export class UserService {
   async create(body: CreateUserDto, actor: AuthenticatedUser) {
     if (body.deptId != null && !isUserId(body.deptId)) {
       throw BusinessException.validation([{ field: 'deptId', messages: ['部门 ID 无效'] }]);
+    }
+    // 不能把用户建在自己看不到的部门里，否则这条记录从此既不可见也不可维护。
+    if (!isDeptInScope(await loadDataScope(this.prisma, actor), body.deptId ?? null)) {
+      throw new ForbiddenException('无权在目标部门创建用户');
     }
     const password = await this.passwords.hashPassword(body.password);
     const row = await this.prisma.$transaction(
@@ -111,7 +135,6 @@ export class UserService {
             status: body.status,
             remark: body.remark,
             createBy: BigInt(actor.userId),
-            createDept: actor.deptId === null ? null : BigInt(actor.deptId),
           },
           select: userSelect,
         });
@@ -129,12 +152,17 @@ export class UserService {
       throw BusinessException.validation([{ field: 'deptId', messages: ['部门 ID 无效'] }]);
     }
     const userId = BigInt(id);
+    const scope = await loadDataScope(this.prisma, actor);
+    // 移动部门同样要落在范围内，否则可以把用户推到看不见的部门里。
+    if (body.deptId !== undefined && !isDeptInScope(scope, body.deptId)) {
+      throw new ForbiddenException('无权把用户移动到目标部门');
+    }
     const password =
       body.password === undefined ? undefined : await this.passwords.hashPassword(body.password);
     const row = await this.prisma.$transaction(
       async (tx) => {
         const current = await tx.user.findFirst({
-          where: { userId, delFlag: '0' },
+          where: withDataScope({ userId, delFlag: '0' }, scope, USER_SCOPE_COLUMNS),
           select: { userId: true, status: true },
         });
         if (!current) throw new NotFoundException('用户不存在');
@@ -197,10 +225,11 @@ export class UserService {
       throw BusinessException.validation([{ field: 'roleIds', messages: ['角色 ID 无效'] }]);
     }
     const userId = BigInt(id);
+    const scope = await loadDataScope(this.prisma, actor);
     const row = await this.prisma.$transaction(
       async (tx) => {
         const user = await tx.user.findFirst({
-          where: { userId, delFlag: '0' },
+          where: withDataScope({ userId, delFlag: '0' }, scope, USER_SCOPE_COLUMNS),
           select: { userId: true },
         });
         if (!user) throw new NotFoundException('用户不存在');
@@ -235,10 +264,11 @@ export class UserService {
       throw BusinessException.validation([{ field: 'id', messages: ['用户 ID 无效'] }]);
     assertNotSuperAdmin(id);
     const userId = BigInt(id);
+    const scope = await loadDataScope(this.prisma, actor);
     await this.prisma.$transaction(
       async (tx) => {
         const user = await tx.user.findFirst({
-          where: { userId, delFlag: '0' },
+          where: withDataScope({ userId, delFlag: '0' }, scope, USER_SCOPE_COLUMNS),
           select: { userId: true },
         });
         if (!user) throw new NotFoundException('用户不存在');

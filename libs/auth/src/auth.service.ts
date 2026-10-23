@@ -4,6 +4,7 @@ import type {
   AuthenticatedUser,
   AuthSnapshot,
   AuthUser,
+  RoleScope,
   TokenPair,
 } from './auth.types.js';
 import type { AuthSession } from './session.store.js';
@@ -45,6 +46,21 @@ export class AuthService {
           deptId: true,
           status: true,
           delFlag: true,
+          // 数据范围随用户一起加载：只取角色和自定义部门，不碰菜单，代价远低于权限快照。
+          // 这样调整 `Role.dataScope` 或 `RoleDept` 立即生效，不需要踢人。
+          roles: {
+            select: {
+              role: {
+                select: {
+                  roleId: true,
+                  dataScope: true,
+                  status: true,
+                  delFlag: true,
+                  depts: { select: { deptId: true } },
+                },
+              },
+            },
+          },
         },
       });
     } catch {
@@ -52,11 +68,22 @@ export class AuthService {
     }
     if (!user || user.status !== '0' || user.delFlag !== '0')
       throw new UnauthorizedException('未认证');
+    const dataScopes: RoleScope[] = [];
+    for (const { role } of user.roles) {
+      if (role.status !== '0' || role.delFlag !== '0') continue;
+      dataScopes.push({
+        roleId: String(role.roleId),
+        dataScope: role.dataScope,
+        deptIds: role.depts.map((dept) => String(dept.deptId)),
+      });
+    }
+    dataScopes.sort((left, right) => (BigInt(left.roleId) < BigInt(right.roleId) ? -1 : 1));
     return {
       userId: String(user.userId),
       userName: user.userName,
       nickName: user.nickName,
       deptId: user.deptId === null ? null : String(user.deptId),
+      dataScopes,
     };
   }
 

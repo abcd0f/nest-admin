@@ -124,7 +124,7 @@ export class RoleService {
    *
    * 对应 Java `SysDeptMapper.selectDeptListByRoleId`，裁剪规则与菜单一致。
    */
-  async deptTreeSelect(id: string): Promise<RoleDeptTreeDto> {
+  async deptTreeSelect(id: string, actor: AuthenticatedUser): Promise<RoleDeptTreeDto> {
     const roleId = this.requireRoleId(id);
     const role = await this.prisma.role.findFirst({
       where: { roleId, delFlag: '0' },
@@ -140,7 +140,8 @@ export class RoleService {
     const checked = role.deptCheckStrictly ? await this.dropParentDepts(ids) : ids;
     return {
       checkedKeys: checked.map((value) => String(value)),
-      depts: await this.depts.findAll(),
+      // 部门树同样受数据范围约束：看不到的部门不能被授予。
+      depts: await this.depts.findAll(actor),
     };
   }
 

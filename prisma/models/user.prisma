@@ -33,8 +33,6 @@ model User {
   updateBy           BigInt?   @map("update_by")
   /// 更新时间
   updateTime         DateTime? @updatedAt @map("update_time") @db.Timestamptz(6)
-  /// 创建部门（审计来源）
-  createDept         BigInt?   @map("create_dept")
   /// 备注
   remark             String?   @db.VarChar(500)
 

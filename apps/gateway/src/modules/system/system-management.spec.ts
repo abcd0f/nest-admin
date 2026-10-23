@@ -21,6 +21,8 @@ const actor: AuthenticatedUser = {
   sessionId: 'session',
   roles: ['operator'],
   permissions: ['system:user:list'],
+  // 全部数据范围：既有用例的 where 断言保持原样，范围行为在 data-scope.spec.ts 单独覆盖。
+  dataScopes: [{ roleId: '2', dataScope: '1', deptIds: [] }],
 };
 /** 会话撤销桩：影响权限的写操作提交后会按用户踢人。 */
 const auth = { revokeUserSessions: vi.fn().mockResolvedValue(1) };
@@ -138,7 +140,7 @@ describe('分页与响应 DTO', () => {
       status: '0',
       orderByColumn: 'userName',
       isAsc: SortOrder.ASC,
-    });
+    }, actor);
     const where = { delFlag: '0', status: '0', userName: { contains: 'ali' }, deptId: 3n };
     expect(prisma.user.findMany).toHaveBeenCalledWith({
       where,
@@ -200,7 +202,7 @@ describe('分页与响应 DTO', () => {
       user: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
       userRole: { findMany: vi.fn().mockResolvedValue([]) },
     };
-    expect(await new UserService(prisma as never, {} as never, auth as never).findAll({})).toMatchObject({
+    expect(await new UserService(prisma as never, {} as never, auth as never).findAll({}, actor)).toMatchObject({
       items: [],
       meta: { total: 0, totalPage: 0 },
     });
@@ -237,14 +239,19 @@ describe('直接参数与字段校验', () => {
         menu: { findUnique: vi.fn() },
         dept: { findFirst: vi.fn() },
       };
-      const services = [
-        new UserService(prisma as never, {} as never, auth as never),
-        new RoleService(prisma as never, auth as never, menuService as never, deptService as never),
-        new MenuService(prisma as never, auth as never),
-        new DeptService(prisma as never),
-      ];
-      for (const service of services)
-        await expect(service.findOne(id)).rejects.toMatchObject({ status: 422 });
+      const userService = new UserService(prisma as never, {} as never, auth as never);
+      const roleService = new RoleService(
+        prisma as never,
+        auth as never,
+        menuService as never,
+        deptService as never,
+      );
+      const menuServiceUnderTest = new MenuService(prisma as never, auth as never);
+      const deptServiceUnderTest = new DeptService(prisma as never);
+      await expect(userService.findOne(id, actor)).rejects.toMatchObject({ status: 422 });
+      await expect(roleService.findOne(id)).rejects.toMatchObject({ status: 422 });
+      await expect(menuServiceUnderTest.findOne(id)).rejects.toMatchObject({ status: 422 });
+      await expect(deptServiceUnderTest.findOne(id, actor)).rejects.toMatchObject({ status: 422 });
       expect(prisma.user.findFirst).not.toHaveBeenCalled();
       expect(prisma.role.findFirst).not.toHaveBeenCalled();
       expect(prisma.menu.findUnique).not.toHaveBeenCalled();
@@ -259,14 +266,26 @@ describe('直接参数与字段校验', () => {
       menu: { findUnique: vi.fn().mockResolvedValue(null) },
       dept: { findFirst: vi.fn().mockResolvedValue(null) },
     };
-    for (const service of [
-      new UserService(prisma as never, {} as never, auth as never),
-      new RoleService(prisma as never, auth as never, menuService as never, deptService as never),
-      new MenuService(prisma as never, auth as never),
-      new DeptService(prisma as never),
-    ]) {
-      await expect(service.findOne('9223372036854775807')).rejects.toMatchObject({ status: 404 });
-    }
+    await expect(
+      new UserService(prisma as never, {} as never, auth as never).findOne(
+        '9223372036854775807',
+        actor,
+      ),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      new RoleService(
+        prisma as never,
+        auth as never,
+        menuService as never,
+        deptService as never,
+      ).findOne('9223372036854775807'),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      new MenuService(prisma as never, auth as never).findOne('9223372036854775807'),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      new DeptService(prisma as never).findOne('9223372036854775807', actor),
+    ).rejects.toMatchObject({ status: 404 });
     expect(prisma.user.findFirst.mock.lastCall?.[0].where.userId).toBe(9223372036854775807n);
   });
 
@@ -374,12 +393,14 @@ describe('菜单和部门管理树', () => {
           ]),
       },
     };
-    const tree = await new DeptService(prisma as never).findAll();
+    const tree = await new DeptService(prisma as never).findAll(actor);
     expect(tree[0]).toBeInstanceOf(DeptTreeDto);
     expect(tree[0].children[0]).toBeInstanceOf(DeptTreeDto);
     expect(instanceToPlain(tree)[0].deptId).toBe('1');
     prisma.dept.findMany.mockResolvedValue([deptRow({ deptId: 2n, parentId: 9n })]);
-    await expect(new DeptService(prisma as never).findAll()).rejects.toMatchObject({ status: 409 });
+    await expect(new DeptService(prisma as never).findAll(actor)).rejects.toMatchObject({
+      status: 409,
+    });
   });
 });
 
@@ -399,7 +420,6 @@ describe('用户管理服务', () => {
     expect(tx.user.create.mock.lastCall?.[0].data).toMatchObject({
       password: 'argon-hash',
       createBy: 7n,
-      createDept: 3n,
     });
     expect(response).toMatchObject({
       userId: '1',
@@ -720,5 +740,84 @@ describe('部门树维护', () => {
     expect(tx.dept.update).not.toHaveBeenCalled();
     await expect(service.remove('1', actor)).rejects.toThrow('部门仍被用户引用');
     expect(tx.dept.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('数据范围落地到管理查询', () => {
+  /** 本部门（3）范围的普通管理员：只能看到部门 3 的数据。 */
+  const scoped: AuthenticatedUser = {
+    ...actor,
+    userId: '7',
+    deptId: '3',
+    dataScopes: [{ roleId: '2', dataScope: '3', deptIds: [] }],
+  };
+
+  it('用户分页把范围条件用 AND 合入，不覆盖筛选条件', async () => {
+    const prisma = {
+      user: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
+      userRole: { findMany: vi.fn().mockResolvedValue([]) },
+    };
+    await new UserService(prisma as never, {} as never, auth as never).findAll(
+      { userName: 'ali' },
+      scoped,
+    );
+    expect(prisma.user.findMany.mock.lastCall?.[0].where).toEqual({
+      AND: [{ delFlag: '0', userName: { contains: 'ali' } }, { deptId: { in: [3n] } }],
+    });
+    expect(prisma.user.count.mock.lastCall?.[0].where).toEqual({
+      AND: [{ delFlag: '0', userName: { contains: 'ali' } }, { deptId: { in: [3n] } }],
+    });
+  });
+
+  it('范围外用户按不存在处理，不会泄露存在性', async () => {
+    const prisma = { user: { findFirst: vi.fn().mockResolvedValue(null) } };
+    await expect(
+      new UserService(prisma as never, {} as never, auth as never).findOne('9', scoped),
+    ).rejects.toMatchObject({ status: 404 });
+    expect(prisma.user.findFirst.mock.lastCall?.[0].where).toEqual({
+      AND: [{ userId: 9n, delFlag: '0' }, { deptId: { in: [3n] } }],
+    });
+  });
+
+  it('部门树被裁掉父节点时把可见子节点挂到根上', async () => {
+    const prisma = {
+      dept: { findMany: vi.fn().mockResolvedValue([deptRow({ deptId: 2n, parentId: 1n })]) },
+    };
+    const tree = await new DeptService(prisma as never).findAll(scoped);
+    expect(prisma.dept.findMany.mock.lastCall?.[0].where).toEqual({
+      AND: [{ delFlag: '0' }, { deptId: { in: [3n] } }],
+    });
+    expect(tree).toHaveLength(1);
+    expect(tree[0]).toMatchObject({ deptId: '2', parentId: '0' });
+  });
+
+  it('受限用户不能把用户或部门建到范围外', async () => {
+    const prisma = { user: { count: vi.fn() }, dept: { findFirst: vi.fn() } };
+    await expect(
+      new UserService(prisma as never, {} as never, auth as never).create(
+        { userName: 'bob', nickName: 'Bob', password: 'secret', deptId: '9' },
+        scoped,
+      ),
+    ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      new DeptService(prisma as never).create({ deptName: 'Ops', parentId: '9' }, scoped),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(prisma.user.count).not.toHaveBeenCalled();
+  });
+
+  it('受限用户不能把用户或部门移动到范围外', async () => {
+    const prisma = { user: { findFirst: vi.fn() }, dept: { findFirst: vi.fn() } };
+    await expect(
+      new UserService(prisma as never, {} as never, auth as never).update(
+        '9',
+        { deptId: '8' },
+        scoped,
+      ),
+    ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      new DeptService(prisma as never).update('9', { parentId: '8' }, scoped),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(prisma.user.findFirst).not.toHaveBeenCalled();
+    expect(prisma.dept.findFirst).not.toHaveBeenCalled();
   });
 });

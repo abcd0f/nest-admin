@@ -46,8 +46,11 @@ export class RoleController {
   /** 角色部门回显：已选 ID 按 deptCheckStrictly 裁剪父节点，另返回完整部门树。 */
   @Get(':id/dept-tree')
   @Permission('system:role:query')
-  deptTree(@Param('id') id: string): Promise<RoleDeptTreeDto> {
-    return this.service.deptTreeSelect(id);
+  deptTree(
+    @Param('id') id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<RoleDeptTreeDto> {
+    return this.service.deptTreeSelect(id, actor);
   }
 
   /** 创建角色，初始数据范围为本人，初始无菜单权限。 */

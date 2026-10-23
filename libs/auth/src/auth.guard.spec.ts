@@ -41,6 +41,7 @@ function setup(method: keyof ProbeController, header?: string, user?: Authentica
     sessionId: 'sid',
     roles: [],
     permissions: ['system:user:list', 'class:resource:read'],
+    dataScopes: [],
   };
   const request = { headers: { authorization: header }, user };
   const context = new ExecutionContextHost(

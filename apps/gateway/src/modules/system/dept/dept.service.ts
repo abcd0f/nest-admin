@@ -4,7 +4,14 @@ import { isUserId } from '@app/auth';
 import { toDto, toDtoList, toTree } from '@app/common';
 import { BusinessException } from '@app/core';
 import { PrismaService } from '@app/database';
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { isDeptInScope, loadDataScope, withDataScope } from '@app/permission';
+import {
+  ConflictException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateDeptDto, DeptResponseDto, DeptTreeDto, UpdateDeptDto } from './dto/dept.dto.js';
 
 const deptSelect = {
@@ -20,6 +27,9 @@ const deptSelect = {
   updateTime: true,
 } satisfies Prisma.DeptSelect;
 
+/** 部门的数据归属：部门自身 + 创建人。 */
+const DEPT_SCOPE_COLUMNS = { dept: 'deptId', owner: 'createBy' } as const;
+
 function checkedPath(ids: bigint[]): string {
   const path = `/${ids.join('/')}/`;
   if (path.length > 512) {
@@ -34,9 +44,10 @@ function checkedPath(ids: bigint[]): string {
 export class DeptService {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
-  async findAll(): Promise<DeptTreeDto[]> {
+  async findAll(actor: AuthenticatedUser): Promise<DeptTreeDto[]> {
+    const filter = await loadDataScope(this.prisma, actor);
     const rows = await this.prisma.dept.findMany({
-      where: { delFlag: '0' },
+      where: withDataScope({ delFlag: '0' }, filter, DEPT_SCOPE_COLUMNS),
       select: deptSelect,
       orderBy: [{ orderNum: 'asc' }, { deptId: 'asc' }],
     });
@@ -44,6 +55,14 @@ export class DeptService {
       DeptTreeDto,
       rows.map((row) => ({ ...row, children: [] })),
     );
+    // 范围过滤可能把父部门裁掉。此时把可见节点挂到根上，否则 toTree 会当成数据损坏。
+    // 未受范围限制时保持原样，缺父节点仍然是真实的数据问题，必须报错。
+    if (filter.kind !== 'all') {
+      const visible = new Set(nodes.map((node) => node.deptId));
+      for (const node of nodes) {
+        if (node.parentId !== '0' && !visible.has(node.parentId)) node.parentId = '0';
+      }
+    }
     try {
       return toTree(nodes, (node) => node.deptId);
     } catch (cause) {
@@ -51,11 +70,15 @@ export class DeptService {
     }
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, actor: AuthenticatedUser) {
     if (!isUserId(id))
       throw BusinessException.validation([{ field: 'id', messages: ['部门 ID 无效'] }]);
     const row = await this.prisma.dept.findFirst({
-      where: { deptId: BigInt(id), delFlag: '0' },
+      where: withDataScope(
+        { deptId: BigInt(id), delFlag: '0' },
+        await loadDataScope(this.prisma, actor),
+        DEPT_SCOPE_COLUMNS,
+      ),
       select: deptSelect,
     });
     if (!row) throw new NotFoundException('部门不存在');
@@ -68,6 +91,10 @@ export class DeptService {
     }
     if (body.leaderId != null && !isUserId(body.leaderId)) {
       throw BusinessException.validation([{ field: 'leaderId', messages: ['负责人 ID 无效'] }]);
+    }
+    // 父部门必须在当前范围内：否则会造出自己看不见的部门子树。
+    if (!isDeptInScope(await loadDataScope(this.prisma, actor), body.parentId ?? '0')) {
+      throw new ForbiddenException('无权在目标父部门下创建部门');
     }
     const row = await this.prisma.$transaction(
       async (tx) => {
@@ -121,10 +148,15 @@ export class DeptService {
       throw BusinessException.validation([{ field: 'leaderId', messages: ['负责人 ID 无效'] }]);
     }
     const deptId = BigInt(id);
+    const scope = await loadDataScope(this.prisma, actor);
+    // 换父部门也要在范围内，否则可以把部门子树整体挪到自己看不见的位置。
+    if (body.parentId !== undefined && !isDeptInScope(scope, body.parentId)) {
+      throw new ForbiddenException('无权把部门移动到目标父部门');
+    }
     const row = await this.prisma.$transaction(
       async (tx) => {
         const current = await tx.dept.findFirst({
-          where: { deptId, delFlag: '0' },
+          where: withDataScope({ deptId, delFlag: '0' }, scope, DEPT_SCOPE_COLUMNS),
           select: deptSelect,
         });
         if (!current) throw new NotFoundException('部门不存在');
@@ -197,10 +229,11 @@ export class DeptService {
     if (!isUserId(id))
       throw BusinessException.validation([{ field: 'id', messages: ['部门 ID 无效'] }]);
     const deptId = BigInt(id);
+    const scope = await loadDataScope(this.prisma, actor);
     await this.prisma.$transaction(
       async (tx) => {
         const dept = await tx.dept.findFirst({
-          where: { deptId, delFlag: '0' },
+          where: withDataScope({ deptId, delFlag: '0' }, scope, DEPT_SCOPE_COLUMNS),
           select: { deptId: true },
         });
         if (!dept) throw new NotFoundException('部门不存在');

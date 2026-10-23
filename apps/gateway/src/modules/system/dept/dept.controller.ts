@@ -15,15 +15,18 @@ export class DeptController {
   /** 查询未删除的部门树，包含停用节点。 */
   @Get()
   @Permission('system:dept:list')
-  findAll(): Promise<DeptTreeDto[]> {
-    return this.service.findAll();
+  findAll(@CurrentUser() actor: AuthenticatedUser): Promise<DeptTreeDto[]> {
+    return this.service.findAll(actor);
   }
 
   /** 查询部门资料及包含自身的祖先路径。 */
   @Get(':id')
   @Permission('system:dept:query')
-  findOne(@Param('id') id: string): Promise<DeptResponseDto> {
-    return this.service.findOne(id);
+  findOne(
+    @Param('id') id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<DeptResponseDto> {
+    return this.service.findOne(id, actor);
   }
 
   /** 创建部门，服务端计算 ancestors 并校验负责人。 */
