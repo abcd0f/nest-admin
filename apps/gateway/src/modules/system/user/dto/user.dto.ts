@@ -64,6 +64,16 @@ export class CreateUserDto {
   @IsIn(['0', '1'])
   status?: string;
 
+  /** 岗位集合；省略表示不改动，空数组清空，重复 ID 去重。 */
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsArray()
+  @ArrayMaxSize(1000)
+  @IsString({ each: true })
+  @Matches(/^[1-9]\d{0,18}$/, { each: true })
+  @MaxLength(19, { each: true })
+  @Type(() => String)
+  postIds?: string[];
+
   /** 备注；null 清空。 */
   @IsOptional()
   @IsString()
@@ -142,6 +152,11 @@ export class UserResponseDto {
   @Expose()
   @Type(() => String)
   roleIds!: string[];
+
+  /** 已关联岗位 ID。 */
+  @Expose()
+  @Type(() => String)
+  postIds!: string[];
 
   @Expose()
   remark!: string | null;

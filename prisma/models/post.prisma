@@ -2,6 +2,8 @@
 model Post {
   /// 职位ID
   postId     BigInt   @id @default(autoincrement()) @map("post_id")
+  /// 所属部门；岗位按部门划分，同名岗位可存在于不同部门
+  deptId     BigInt?  @map("dept_id")
   /// 职位编码
   postCode   String   @map("post_code") @db.VarChar(64)
   /// 职位名称

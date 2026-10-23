@@ -36,6 +36,7 @@ const userSelect = {
   createTime: true,
   updateTime: true,
   roles: { select: { roleId: true }, orderBy: { roleId: 'asc' } },
+  posts: { select: { postId: true }, orderBy: { postId: 'asc' } },
 } satisfies Prisma.UserSelect;
 
 /** 用户的数据归属：部门 + 创建人，对应 Java `@DataColumn(deptName→dept_id, userName→create_by)`。 */
@@ -65,16 +66,25 @@ export class UserService {
       USER_SCOPE_COLUMNS,
     );
     const page = await paginate(this.prisma.user, { ...query, where });
-    const roles = await this.prisma.userRole.findMany({
-      where: { userId: { in: page.items.map((row) => row.userId) } },
-      select: { userId: true, roleId: true },
-      orderBy: { roleId: 'asc' },
-    });
+    const userIds = page.items.map((row) => row.userId);
+    const [roles, posts] = await Promise.all([
+      this.prisma.userRole.findMany({
+        where: { userId: { in: userIds } },
+        select: { userId: true, roleId: true },
+        orderBy: { roleId: 'asc' },
+      }),
+      this.prisma.userPost.findMany({
+        where: { userId: { in: userIds } },
+        select: { userId: true, postId: true },
+        orderBy: { postId: 'asc' },
+      }),
+    ]);
     return toPageDto(UserResponseDto, {
       ...page,
       items: page.items.map((row) => ({
         ...row,
         roleIds: roles.filter((role) => role.userId === row.userId).map((role) => role.roleId),
+        postIds: posts.filter((post) => post.userId === row.userId).map((post) => post.postId),
       })),
     });
   }
@@ -95,6 +105,7 @@ export class UserService {
     return toDto(UserResponseDto, {
       ...row,
       roleIds: row.roles.map((role) => role.roleId),
+      postIds: row.posts.map((post) => post.postId),
     })!;
   }
 
@@ -123,7 +134,7 @@ export class UserService {
             ]);
           }
         }
-        return tx.user.create({
+        const created = await tx.user.create({
           data: {
             userName: body.userName,
             nickName: body.nickName,
@@ -138,10 +149,20 @@ export class UserService {
           },
           select: userSelect,
         });
+        // 用户刚创建，`created.posts` 必然为空，岗位以本次提交的集合为准。
+        const postIds =
+          body.postIds === undefined
+            ? []
+            : await this.replacePosts(tx, created.userId, body.postIds);
+        return { row: created, postIds };
       },
       { isolationLevel: 'Serializable' },
     );
-    return toDto(UserResponseDto, { ...row, roleIds: row.roles.map((role) => role.roleId) })!;
+    return toDto(UserResponseDto, {
+      ...row.row,
+      roleIds: row.row.roles.map((role) => role.roleId),
+      postIds: row.postIds,
+    })!;
   }
 
   async update(id: string, body: UpdateUserDto, actor: AuthenticatedUser) {
@@ -187,6 +208,8 @@ export class UserService {
             ]);
           }
         }
+        // 先替换岗位关联，再读用户，返回体里的 posts 就是最新集合。
+        if (body.postIds !== undefined) await this.replacePosts(tx, userId, body.postIds);
         const updated = await tx.user.update({
           where: { userId },
           data: {
@@ -214,7 +237,11 @@ export class UserService {
     );
     // 状态变更后旧会话里的权限快照不再可信，撤销该用户全部设备会话。
     if (body.status !== undefined) await revokeSessions(this.auth, [userId]);
-    return toDto(UserResponseDto, { ...row, roleIds: row.roles.map((role) => role.roleId) })!;
+    return toDto(UserResponseDto, {
+      ...row,
+      roleIds: row.roles.map((role) => role.roleId),
+      postIds: row.posts.map((post) => post.postId),
+    })!;
   }
 
   async assignRoles(id: string, body: AssignUserRolesDto, actor: AuthenticatedUser) {
@@ -256,7 +283,11 @@ export class UserService {
     );
     // 角色集合变了，快照必须作废；用户下次登录才会拿到新权限。
     await revokeSessions(this.auth, [userId]);
-    return toDto(UserResponseDto, { ...row, roleIds: row.roles.map((role) => role.roleId) })!;
+    return toDto(UserResponseDto, {
+      ...row,
+      roleIds: row.roles.map((role) => role.roleId),
+      postIds: row.posts.map((post) => post.postId),
+    })!;
   }
 
   async remove(id: string, actor: AuthenticatedUser): Promise<void> {
@@ -277,6 +308,7 @@ export class UserService {
           throw new ConflictException('用户仍是部门负责人，请先更换负责人');
         }
         await tx.userRole.deleteMany({ where: { userId } });
+        await tx.userPost.deleteMany({ where: { userId } });
         await tx.user.update({
           where: { userId },
           data: { delFlag: '2', updateBy: BigInt(actor.userId) },
@@ -286,5 +318,35 @@ export class UserService {
     );
     // 用户已逻辑删除，残留会话必须立即失效。
     await revokeSessions(this.auth, [userId]);
+  }
+
+  /**
+   * 完整替换用户的岗位关联，返回去重后的岗位 ID。
+   *
+   * 与分配角色不同，岗位在用户创建/更新时一起提交（对齐 Java `SysUserBo.postIds`），
+   * 不单独开接口。岗位必须存在、启用且未删除，否则整笔事务回滚。
+   */
+  private async replacePosts(
+    tx: Prisma.TransactionClient,
+    userId: bigint,
+    postIds: readonly string[],
+  ): Promise<string[]> {
+    const ids = [...new Set(postIds)].map(BigInt);
+    if (ids.length) {
+      const posts = await tx.post.findMany({
+        where: { postId: { in: ids }, status: '0', delFlag: '0' },
+        select: { postId: true },
+      });
+      if (posts.length !== ids.length) {
+        throw BusinessException.validation([
+          { field: 'postIds', messages: ['包含不存在、停用或已删除的岗位'] },
+        ]);
+      }
+    }
+    await tx.userPost.deleteMany({ where: { userId } });
+    if (ids.length) {
+      await tx.userPost.createMany({ data: ids.map((postId) => ({ userId, postId })) });
+    }
+    return ids.map(String);
   }
 }

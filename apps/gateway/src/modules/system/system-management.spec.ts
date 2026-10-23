@@ -8,6 +8,7 @@ import { DeptService } from './dept/dept.service.js';
 import { DeptResponseDto, DeptTreeDto, UpdateDeptDto } from './dept/dto/dept.dto.js';
 import { MenuResponseDto, MenuTreeDto, UpdateMenuDto } from './menu/dto/menu.dto.js';
 import { MenuService } from './menu/menu.service.js';
+import { PostService } from './post/post.service.js';
 import { RoleQueryDto, RoleResponseDto } from './role/dto/role.dto.js';
 import { RoleService } from './role/role.service.js';
 import { UpdateUserDto, UserQueryDto, UserResponseDto } from './user/dto/user.dto.js';
@@ -51,6 +52,7 @@ function userRow(extra: Record<string, unknown> = {}) {
     createTime: date,
     updateTime: null,
     roles: [{ roleId: 2n }],
+    posts: [],
     ...extra,
   };
 }
@@ -130,6 +132,9 @@ describe('分页与响应 DTO', () => {
           { userId: 99n, roleId: 9n },
         ]),
       },
+      userPost: {
+        findMany: vi.fn().mockResolvedValue([{ userId: 1n, postId: 4n }]),
+      },
     };
     const service = new UserService(prisma as never, {} as never, auth as never);
     const page = await service.findAll({
@@ -201,6 +206,7 @@ describe('分页与响应 DTO', () => {
     const prisma = {
       user: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
       userRole: { findMany: vi.fn().mockResolvedValue([]) },
+      userPost: { findMany: vi.fn().mockResolvedValue([]) },
     };
     expect(await new UserService(prisma as never, {} as never, auth as never).findAll({}, actor)).toMatchObject({
       items: [],
@@ -756,6 +762,7 @@ describe('数据范围落地到管理查询', () => {
     const prisma = {
       user: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
       userRole: { findMany: vi.fn().mockResolvedValue([]) },
+      userPost: { findMany: vi.fn().mockResolvedValue([]) },
     };
     await new UserService(prisma as never, {} as never, auth as never).findAll(
       { userName: 'ali' },
@@ -819,5 +826,133 @@ describe('数据范围落地到管理查询', () => {
     ).rejects.toMatchObject({ status: 403 });
     expect(prisma.user.findFirst).not.toHaveBeenCalled();
     expect(prisma.dept.findFirst).not.toHaveBeenCalled();
+  });
+});
+
+describe('岗位管理与用户岗位分配', () => {
+  function postRow(extra: Record<string, unknown> = {}) {
+    return {
+      postId: 5n,
+      deptId: 3n,
+      postCode: 'ceo',
+      postName: '董事长',
+      orderNum: 0,
+      status: '0',
+      remark: null,
+      createTime: date,
+      updateTime: null,
+      ...extra,
+    };
+  }
+
+  it('岗位分页受数据范围约束，并按部门/编码/名称过滤', async () => {
+    const prisma = {
+      post: { findMany: vi.fn().mockResolvedValue([postRow()]), count: vi.fn().mockResolvedValue(1) },
+    };
+    const page = await new PostService(prisma as never).findAll(
+      { postCode: 'ce', postName: '董', deptId: '3', status: '0' },
+      actor,
+    );
+    expect(prisma.post.findMany.mock.lastCall?.[0].where).toEqual({
+      delFlag: '0',
+      postCode: { contains: 'ce' },
+      postName: { contains: '董' },
+      status: '0',
+      deptId: 3n,
+    });
+    expect(page.items[0]).toMatchObject({ postId: '5', deptId: '3', postCode: 'ceo' });
+  });
+
+  it('岗位编码全局唯一、岗位名称在部门内唯一', async () => {
+    const tx = {
+      dept: { findFirst: vi.fn().mockResolvedValue({ deptId: 3n }) },
+      post: { count: vi.fn().mockResolvedValue(1), create: vi.fn() },
+    };
+    const service = new PostService({ $transaction: transaction(tx) } as never);
+    await expect(
+      service.create({ deptId: '3', postCode: 'ceo', postName: '董事长' }, actor),
+    ).rejects.toThrow('岗位编码已存在');
+    expect(tx.post.create).not.toHaveBeenCalled();
+  });
+
+  it('已分配用户的岗位不能停用，也不能删除', async () => {
+    const tx = {
+      post: {
+        findFirst: vi.fn().mockResolvedValue({ postId: 5n, deptId: 3n }),
+        update: vi.fn(),
+      },
+      userPost: { count: vi.fn().mockResolvedValue(2) },
+    };
+    const service = new PostService({ $transaction: transaction(tx) } as never);
+    await expect(service.update('5', { status: '1' }, actor)).rejects.toThrow(
+      '岗位已分配用户，不能停用',
+    );
+    await expect(service.remove('5', actor)).rejects.toThrow('岗位已分配用户，不能删除');
+    expect(tx.post.update).not.toHaveBeenCalled();
+  });
+
+  it('删除岗位写逻辑删除标记，不物理删除', async () => {
+    const tx = {
+      post: {
+        findFirst: vi.fn().mockResolvedValue({ postId: 5n }),
+        update: vi.fn().mockResolvedValue(postRow()),
+      },
+      userPost: { count: vi.fn().mockResolvedValue(0) },
+    };
+    await new PostService({ $transaction: transaction(tx) } as never).remove('5', actor);
+    expect(tx.post.update.mock.lastCall?.[0].data).toMatchObject({ delFlag: '2', updateBy: 7n });
+  });
+
+  it('创建用户时一并写入岗位关联，返回体带 postIds', async () => {
+    const tx = {
+      user: { count: vi.fn().mockResolvedValue(0), create: vi.fn().mockResolvedValue(userRow()) },
+      post: { findMany: vi.fn().mockResolvedValue([{ postId: 5n }]) },
+      userPost: { deleteMany: vi.fn(), createMany: vi.fn() },
+    };
+    const passwords = { hashPassword: vi.fn().mockResolvedValue('argon-hash') };
+    const response = await new UserService(
+      { $transaction: transaction(tx) } as never,
+      passwords as never,
+      auth as never,
+    ).create({ userName: 'alice', nickName: 'Alice', password: 'secret', postIds: ['5'] }, actor);
+    expect(tx.userPost.createMany).toHaveBeenCalledWith({ data: [{ userId: 1n, postId: 5n }] });
+    expect(response.postIds).toEqual(['5']);
+  });
+
+  it('引用不存在或停用的岗位时整笔事务回滚', async () => {
+    const tx = {
+      user: { count: vi.fn().mockResolvedValue(0), create: vi.fn().mockResolvedValue(userRow()) },
+      post: { findMany: vi.fn().mockResolvedValue([]) },
+      userPost: { deleteMany: vi.fn(), createMany: vi.fn() },
+    };
+    const service = new UserService(
+      { $transaction: transaction(tx) } as never,
+      { hashPassword: vi.fn().mockResolvedValue('argon-hash') } as never,
+      auth as never,
+    );
+    await expect(
+      service.create(
+        { userName: 'alice', nickName: 'Alice', password: 'secret', postIds: ['9'] },
+        actor,
+      ),
+    ).rejects.toMatchObject({ status: 422 });
+    expect(tx.userPost.createMany).not.toHaveBeenCalled();
+  });
+
+  it('岗位下拉只返回启用岗位，并同样受数据范围约束', async () => {
+    const prisma = {
+      post: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue([{ postId: 5n, postCode: 'ceo', postName: '董事长' }]),
+      },
+    };
+    const options = await new PostService(prisma as never).options('3', actor);
+    expect(prisma.post.findMany.mock.lastCall?.[0].where).toEqual({
+      delFlag: '0',
+      status: '0',
+      deptId: 3n,
+    });
+    expect(options[0]).toMatchObject({ postId: '5', postCode: 'ceo' });
   });
 });

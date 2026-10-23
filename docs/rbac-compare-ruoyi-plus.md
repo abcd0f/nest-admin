@@ -73,7 +73,7 @@ libs/
 | `sys_role` | `tenant_id`、`role_sort`、`data_scope`(默认 `'1'`)、`menu_check_strictly`、`dept_check_strictly` | `order_num`、`data_scope`(**默认 `'5'`**)、`menu_check_strictly`、`dept_check_strictly` | 默认数据范围不同 |
 | `sys_menu` | 无 `del_flag`、有 `create_dept`、`query_param` | 无 `del_flag`、有 `query`、无 `create_dept` | 字段改名 |
 | `sys_dept` | `tenant_id`、`dept_category`、`leader`/`phone`/`email` | `leader_id`，无 `dept_category`/`phone`/`email` | 精简 |
-| `sys_post` | 有完整模块（Controller/Service/Mapper） | **只有 Prisma model，无 service/controller** | 未接入 |
+| `sys_post` | `dept_id`(非空)、`post_category`、`post_sort`，**物理删除**（无 `del_flag`） | `dept_id`(可空)、无 `post_category`、`order_num`，**逻辑删除** `del_flag='2'` | 结构对齐，删除语义不同 |
 | `sys_user_role` / `sys_role_menu` / `sys_role_dept` | 有 | 有（复合主键 + `onDelete: Cascade`） | 一致 |
 | 租户套餐 | `sys_tenant_package`（`menu_ids` 字符串） | 无 | 无租户 |
 
@@ -408,10 +408,10 @@ RuoYi 的优势在于**能力密度**：一个注解就把 SQL 改了，业务�
 | 角色 CRUD | ✅ | ✅ | |
 | 菜单/按钮 CRUD | ✅ | ✅ | |
 | 部门树 CRUD | ✅ | ✅ | |
-| 岗位管理 | ✅ | ❌ 仅 model | `sys_post` 表存在，无接口 |
+| 岗位管理 | ✅ | ✅ | 见 `docs/post-module.md` |
 | 用户-角色分配 | ✅ | ✅ | |
 | 角色-菜单分配 | ✅ | ✅ | 都实现了 `menuCheckStrictly` 父节点裁剪 |
-| 角色-部门（自定义范围） | ✅ | ✅（仅存储） | 存了不用 |
+| 角色-部门（自定义范围） | ✅ | ✅ | 已用于数据范围过滤 |
 | 功能权限判定 | ✅ | ✅ | |
 | **数据权限判定** | ✅ SQL 改写 | ✅ `where` 构造器 | 阶段 6 已交付 |
 | 数据权限操作级校验 | ✅ `checkUserDataScope` | ✅ 范围条件进存在性判断 | 越权按 404 处理 |
@@ -437,7 +437,7 @@ RuoYi 的优势在于**能力密度**：一个注解就把 SQL 改了，业务�
 
 1. ~~补数据权限执行器~~ 已完成，见 `docs/rbac-phase6-data-scope.md`。
 2. ~~补操作级数据权限校验~~ 已完成：详情/更新/删除/分配角色都带范围条件，越权返回 404；创建校验目标部门。
-3. **补岗位模块或删表（P1）**。`sys_post` 和 `UserPost` 现在是死数据，`LoginUser` 在 Java 侧是带 `posts` 的。要么接入，要么在文档里标明"预留"。
+3. ~~补岗位模块或删表~~ 已完成：`/system/posts` CRUD + 下拉，用户创建/更新时提交 `postIds`。见 `docs/post-module.md`。
 4. **补操作日志（P1）**。`OperLog`/`LoginLog` 两个 model 空转，合规审计场景会卡住。Nest 里用 Interceptor + `@Log()` 装饰器实现，比 Spring AOP 更简单。
 5. **补登录失败锁定（P2）**。`dummyHash` 只防枚举，不防爆破；`ThrottlerGuard` 是全局限流，不能替代按账号计数。
 6. **菜单权限码常量化（P2）**。`'system:user:list'` 这类字符串散落在 25 个注解里，改名靠全局搜索。抽成 `const PERMISSIONS = { user: { list: 'system:user:list', ... } }` 能消掉一类低级错误。
