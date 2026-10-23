@@ -313,11 +313,7 @@ describe('实际网关 RBAC 接入 (e2e)', () => {
     for (const id of ['0', '01', '1.0', '9223372036854775808', 'abc']) {
       const response = await request(id);
       expect(response.statusCode).toBe(422);
-      expect(response.json()).toMatchObject({
-        code: 422,
-        data: null,
-        errors: [{ field: 'id', messages: ['ID 无效'] }],
-      });
+      expect(response.json()).toEqual({ code: 422, data: null, message: 'ID 无效' });
     }
   });
 

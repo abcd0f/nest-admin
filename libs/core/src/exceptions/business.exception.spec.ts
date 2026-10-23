@@ -31,11 +31,21 @@ describe('业务异常', () => {
 
   it('校验失败工厂返回标准 HTTP 422 与字段错误', () => {
     const errors = [{ field: 'items.0.name', messages: ['name should not be empty'] }];
-    const exception = BusinessException.validation(errors);
+    const exception = BusinessException.validation(undefined, errors);
 
     expect(exception.getStatus()).toBe(HttpStatus.UNPROCESSABLE_ENTITY);
     expect(exception.code).toBe(BUSINESS_CODE.VALIDATION_FAILED);
+    expect(exception.message).toBe('请求参数校验失败');
     expect(exception.errors).toEqual(errors);
+  });
+
+  it('业务校验只传提示时，不携带字段错误', () => {
+    const exception = BusinessException.validation('自定义数据范围必须选择部门');
+
+    expect(exception.getStatus()).toBe(HttpStatus.UNPROCESSABLE_ENTITY);
+    expect(exception.code).toBe(BUSINESS_CODE.VALIDATION_FAILED);
+    expect(exception.message).toBe('自定义数据范围必须选择部门');
+    expect(exception.errors).toBeUndefined();
   });
 
   it('拒绝把成功码 0 当作错误码', () => {

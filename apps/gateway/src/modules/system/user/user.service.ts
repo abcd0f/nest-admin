@@ -52,7 +52,7 @@ export class UserService {
 
   async findAll(query: UserQueryDto, actor: AuthenticatedUser) {
     if (query.deptId !== undefined && !isBigIntId(query.deptId)) {
-      throw BusinessException.validation([{ field: 'deptId', messages: ['部门 ID 无效'] }]);
+      throw BusinessException.validation('部门 ID 无效');
     }
     // 数据范围按角色 dataScope 收敛到可见部门/本人，再叠加用户自己传的筛选条件。
     const where = withDataScope<Prisma.UserWhereInput>(
@@ -109,7 +109,7 @@ export class UserService {
 
   async create(body: CreateUserDto, actor: AuthenticatedUser) {
     if (body.deptId != null && !isBigIntId(body.deptId)) {
-      throw BusinessException.validation([{ field: 'deptId', messages: ['部门 ID 无效'] }]);
+      throw BusinessException.validation('部门 ID 无效');
     }
     // 不能把用户建在自己看不到的部门里，否则这条记录从此既不可见也不可维护。
     if (!isDeptInScope(await loadDataScope(this.prisma, actor), body.deptId ?? null)) {
@@ -127,9 +127,7 @@ export class UserService {
             select: { deptId: true },
           });
           if (!dept) {
-            throw BusinessException.validation([
-              { field: 'deptId', messages: ['部门不存在、停用或已删除'] },
-            ]);
+            throw BusinessException.validation('部门不存在、停用或已删除');
           }
         }
         const created = await tx.user.create({
@@ -166,7 +164,7 @@ export class UserService {
   async update(id: bigint, body: UpdateUserDto, actor: AuthenticatedUser) {
     assertNotSuperAdmin(id);
     if (body.deptId != null && !isBigIntId(body.deptId)) {
-      throw BusinessException.validation([{ field: 'deptId', messages: ['部门 ID 无效'] }]);
+      throw BusinessException.validation('部门 ID 无效');
     }
     const userId = id;
     const scope = await loadDataScope(this.prisma, actor);
@@ -199,9 +197,7 @@ export class UserService {
             select: { deptId: true },
           });
           if (!dept) {
-            throw BusinessException.validation([
-              { field: 'deptId', messages: ['部门不存在、停用或已删除'] },
-            ]);
+            throw BusinessException.validation('部门不存在、停用或已删除');
           }
         }
         // 先替换岗位关联，再读用户，返回体里的 posts 就是最新集合。
@@ -243,7 +239,7 @@ export class UserService {
   async assignRoles(id: bigint, body: AssignUserRolesDto, actor: AuthenticatedUser) {
     assertNotSuperAdmin(id);
     if (body.roleIds.some((roleId) => !isBigIntId(roleId))) {
-      throw BusinessException.validation([{ field: 'roleIds', messages: ['角色 ID 无效'] }]);
+      throw BusinessException.validation('角色 ID 无效');
     }
     const userId = id;
     const scope = await loadDataScope(this.prisma, actor);
@@ -260,9 +256,7 @@ export class UserService {
           select: { roleId: true },
         });
         if (roles.length !== ids.length) {
-          throw BusinessException.validation([
-            { field: 'roleIds', messages: ['包含不存在、停用或已删除的角色'] },
-          ]);
+          throw BusinessException.validation('包含不存在、停用或已删除的角色');
         }
         await tx.userRole.deleteMany({ where: { userId } });
         if (ids.length)
@@ -330,9 +324,7 @@ export class UserService {
         select: { postId: true },
       });
       if (posts.length !== ids.length) {
-        throw BusinessException.validation([
-          { field: 'postIds', messages: ['包含不存在、停用或已删除的岗位'] },
-        ]);
+        throw BusinessException.validation('包含不存在、停用或已删除的岗位');
       }
     }
     await tx.userPost.deleteMany({ where: { userId } });

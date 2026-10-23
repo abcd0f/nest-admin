@@ -35,7 +35,8 @@ export class DtoValidationPipe extends ValidationPipe {
       validationError: { target: false, value: false },
       dismissDefaultMessages: true,
       // 不回显自定义校验消息中的密码或令牌原文。
-      exceptionFactory: (errors) => BusinessException.validation(fieldErrors(errors)),
+      // 首个参数留空，使用「请求参数校验失败」的默认提示，字段明细走 errors。
+      exceptionFactory: (errors) => BusinessException.validation(undefined, fieldErrors(errors)),
     });
   }
 

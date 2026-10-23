@@ -243,7 +243,7 @@ export class RoleService {
 
   async assignMenus(id: bigint, body: AssignRoleMenusDto, actor: AuthenticatedUser) {
     if (body.menuIds.some((menuId) => !isBigIntId(menuId))) {
-      throw BusinessException.validation([{ field: 'menuIds', messages: ['菜单 ID 无效'] }]);
+      throw BusinessException.validation('菜单 ID 无效');
     }
     const roleId = id;
     const row = await this.prisma.$transaction(
@@ -259,9 +259,7 @@ export class RoleService {
           select: { menuId: true },
         });
         if (menus.length !== menuIds.length) {
-          throw BusinessException.validation([
-            { field: 'menuIds', messages: ['包含不存在或停用的菜单'] },
-          ]);
+          throw BusinessException.validation('包含不存在或停用的菜单');
         }
         await tx.roleMenu.deleteMany({ where: { roleId } });
         if (menuIds.length)
@@ -285,7 +283,7 @@ export class RoleService {
 
   async dataScope(id: bigint, body: RoleDataScopeDto, actor: AuthenticatedUser) {
     if (body.deptIds?.some((deptId) => !isBigIntId(deptId))) {
-      throw BusinessException.validation([{ field: 'deptIds', messages: ['部门 ID 无效'] }]);
+      throw BusinessException.validation('部门 ID 无效');
     }
     const roleId = id;
     const row = await this.prisma.$transaction(
@@ -296,14 +294,10 @@ export class RoleService {
         });
         if (!role) throw new NotFoundException('角色不存在');
         if (body.dataScope === '2' && !body.deptIds?.length) {
-          throw BusinessException.validation([
-            { field: 'deptIds', messages: ['自定义数据范围必须选择部门'] },
-          ]);
+          throw BusinessException.validation('自定义数据范围必须选择部门');
         }
         if (body.dataScope !== '2' && body.deptIds?.length) {
-          throw BusinessException.validation([
-            { field: 'deptIds', messages: ['非自定义数据范围不能指定部门'] },
-          ]);
+          throw BusinessException.validation('非自定义数据范围不能指定部门');
         }
         const deptIds = body.dataScope === '2' ? [...new Set(body.deptIds)].map(BigInt) : [];
         const depts = await tx.dept.findMany({
@@ -311,9 +305,7 @@ export class RoleService {
           select: { deptId: true },
         });
         if (depts.length !== deptIds.length) {
-          throw BusinessException.validation([
-            { field: 'deptIds', messages: ['包含不存在、停用或已删除的部门'] },
-          ]);
+          throw BusinessException.validation('包含不存在、停用或已删除的部门');
         }
         await tx.roleDept.deleteMany({ where: { roleId } });
         if (deptIds.length)

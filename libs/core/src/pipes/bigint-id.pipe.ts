@@ -30,7 +30,7 @@ const BIGINT_METATYPE = BigInt as unknown as Type<unknown>;
  *
  * 刻意不声明构造参数：本管道以 `APP_PIPE` + `useClass` 全局注册，
  * 一旦有构造参数，Nest 会把它当依赖去容器里解析（`string` 会变成 `String` 令牌）并启动失败。
- * 错误提示里的实体名由 `field`（参数名）表达，不再按实体定制文案。
+ * 失败时统一返回一条提示，不构造字段错误，也不再按参数名或实体定制文案。
  */
 @Injectable()
 export class BigIntIdPipe implements PipeTransform<unknown, unknown> {
@@ -39,7 +39,7 @@ export class BigIntIdPipe implements PipeTransform<unknown, unknown> {
     // 已经转换过的值保持幂等，避免重复校验。
     if (typeof value === 'bigint') return value;
     if (!isBigIntId(value)) {
-      throw BusinessException.validation([{ field: metadata.data ?? 'id', messages: ['ID 无效'] }]);
+      throw BusinessException.validation('ID 无效');
     }
     return BigInt(value);
   }

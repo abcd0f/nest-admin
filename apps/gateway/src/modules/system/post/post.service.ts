@@ -48,7 +48,7 @@ export class PostService {
 
   async findAll(query: PostQueryDto, actor: AuthenticatedUser) {
     if (query.deptId !== undefined && !isBigIntId(query.deptId)) {
-      throw BusinessException.validation([{ field: 'deptId', messages: ['部门 ID 无效'] }]);
+      throw BusinessException.validation('部门 ID 无效');
     }
     const where = withDataScope<Prisma.PostWhereInput>(
       {
@@ -81,7 +81,7 @@ export class PostService {
   /** 岗位下拉：只返回启用且未删除的岗位，可限定部门。 */
   async options(deptId: string | undefined, actor: AuthenticatedUser): Promise<PostOptionDto[]> {
     if (deptId !== undefined && !isBigIntId(deptId)) {
-      throw BusinessException.validation([{ field: 'deptId', messages: ['部门 ID 无效'] }]);
+      throw BusinessException.validation('部门 ID 无效');
     }
     const rows = await this.prisma.post.findMany({
       where: withDataScope<Prisma.PostWhereInput>(
@@ -101,13 +101,11 @@ export class PostService {
 
   async create(body: CreatePostDto, actor: AuthenticatedUser) {
     if (body.deptId !== undefined && !isBigIntId(body.deptId))
-      throw BusinessException.validation([{ field: 'deptId', messages: ['部门 ID 无效'] }]);
+      throw BusinessException.validation('部门 ID 无效');
     // 表单不带部门时落到当前用户部门：前端岗位表单没有部门字段，左侧部门树只做筛选。
     const target = body.deptId ?? actor.deptId;
     if (target === null) {
-      throw BusinessException.validation([
-        { field: 'deptId', messages: ['当前用户没有所属部门，无法确定岗位归属'] },
-      ]);
+      throw BusinessException.validation('当前用户没有所属部门，无法确定岗位归属');
     }
     const deptId = BigInt(target);
     // 岗位归属部门必须在当前范围内，否则创建者自己看不到这个岗位。
@@ -143,7 +141,7 @@ export class PostService {
 
   async update(id: bigint, body: UpdatePostDto, actor: AuthenticatedUser) {
     if (body.deptId !== undefined && !isBigIntId(body.deptId))
-      throw BusinessException.validation([{ field: 'deptId', messages: ['部门 ID 无效'] }]);
+      throw BusinessException.validation('部门 ID 无效');
     const postId = id;
     const scope = await loadDataScope(this.prisma, actor);
     if (body.deptId !== undefined && !isDeptInScope(scope, body.deptId)) {
@@ -225,9 +223,7 @@ export class PostService {
       select: { deptId: true },
     });
     if (!dept) {
-      throw BusinessException.validation([
-        { field: 'deptId', messages: ['部门不存在、停用或已删除'] },
-      ]);
+      throw BusinessException.validation('部门不存在、停用或已删除');
     }
   }
 }

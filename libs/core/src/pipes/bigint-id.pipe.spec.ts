@@ -53,17 +53,16 @@ describe('全局 BigInt 主键管道', () => {
     ['非数字', 'abc'],
     ['int64 上界 +1', '9223372036854775808'],
     ['19 位溢出值', '9999999999999999999'],
-  ])('拒绝%s并返回 422 字段错误', (_label, value) => {
+  ])('拒绝%s并返回 422 提示', (_label, value) => {
     const error = catchError(pipe, value, paramMeta());
     expect(error).toBeInstanceOf(BusinessException);
     expect(error.getStatus()).toBe(422);
-    expect(error.errors).toEqual([{ field: 'id', messages: ['ID 无效'] }]);
+    expect(error.message).toBe('ID 无效');
+    expect(error.errors).toBeUndefined();
   });
 
-  it('字段名取自参数名', () => {
-    expect(catchError(pipe, 'x', paramMeta('roleId')).errors).toEqual([
-      { field: 'roleId', messages: ['ID 无效'] },
-    ]);
+  it('提示文案与参数名无关，统一为 ID 无效', () => {
+    expect(catchError(pipe, 'x', paramMeta('roleId')).message).toBe('ID 无效');
   });
 
   it('判定函数与管道保持同一套规则', () => {

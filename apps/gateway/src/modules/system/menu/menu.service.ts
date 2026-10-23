@@ -30,21 +30,16 @@ const menuSelect = {
 
 function checkType(type: string, parentType?: string) {
   if (type === 'F' ? parentType !== 'C' : parentType !== undefined && parentType !== 'M') {
-    throw BusinessException.validation([
-      {
-        field: 'menuType',
-        messages: ['目录/菜单只能属于目录，按钮必须属于菜单且不能作为父节点'],
-      },
-    ]);
+    throw BusinessException.validation('目录/菜单只能属于目录，按钮必须属于菜单且不能作为父节点');
   }
 }
 
 function checkPerms(type: string, perms: string | null | undefined) {
   if (type === 'F' && !perms) {
-    throw BusinessException.validation([{ field: 'perms', messages: ['按钮必须指定操作权限码'] }]);
+    throw BusinessException.validation('按钮必须指定操作权限码');
   }
   if (type === 'M' && perms) {
-    throw BusinessException.validation([{ field: 'perms', messages: ['目录不能指定操作权限码'] }]);
+    throw BusinessException.validation('目录不能指定操作权限码');
   }
 }
 
@@ -82,7 +77,7 @@ export class MenuService {
 
   async create(body: CreateMenuDto, actor: AuthenticatedUser) {
     if (body.parentId !== undefined && body.parentId !== '0' && !isBigIntId(body.parentId)) {
-      throw BusinessException.validation([{ field: 'parentId', messages: ['父菜单 ID 无效'] }]);
+      throw BusinessException.validation('父菜单 ID 无效');
     }
     const row = await this.prisma.$transaction(
       async (tx) => {
@@ -121,7 +116,7 @@ export class MenuService {
 
   async update(id: bigint, body: UpdateMenuDto, actor: AuthenticatedUser) {
     if (body.parentId !== undefined && body.parentId !== '0' && !isBigIntId(body.parentId)) {
-      throw BusinessException.validation([{ field: 'parentId', messages: ['父菜单 ID 无效'] }]);
+      throw BusinessException.validation('父菜单 ID 无效');
     }
     const menuId = id;
     const row = await this.prisma.$transaction(
@@ -202,9 +197,7 @@ export class MenuService {
       seen.add(current);
       const node = byId.get(current);
       if (!node || node.status !== '0') {
-        throw BusinessException.validation([
-          { field: 'parentId', messages: ['父节点及其祖先必须存在且启用'] },
-        ]);
+        throw BusinessException.validation('父节点及其祖先必须存在且启用');
       }
       current = node.parentId;
     }

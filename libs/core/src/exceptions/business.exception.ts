@@ -70,10 +70,17 @@ export class BusinessException extends HttpException {
   /**
    * 构造参数校验失败异常（HTTP 422）。
    *
-   * 供全局校验管道在把 class-validator 的错误树拍平成 `FieldError[]` 后调用，
-   * 避免过滤器重新理解 class-validator 的树结构。
+   * 业务代码直接传一条面向用户的提示，不构造字段错误：
+   *
+   * ```ts
+   * throw BusinessException.validation('自定义数据范围必须选择部门');
+   * ```
+   *
+   * 只有全局校验管道（`DtoValidationPipe`）会把 class-validator 的错误树
+   * 拍平成 `FieldError[]` 后作为第二个参数传入，避免过滤器重新理解树结构。
+   * 不传 `errors` 时响应体只有 `message`，不带 `errors` 字段。
    */
-  static validation(errors: FieldError[], message?: string): BusinessException {
+  static validation(message?: string, errors?: FieldError[]): BusinessException {
     return new BusinessException(
       {
         code: BUSINESS_CODE.VALIDATION_FAILED,

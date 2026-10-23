@@ -32,9 +32,7 @@ const DEPT_SCOPE_COLUMNS = { dept: 'deptId', owner: 'createBy' } as const;
 function checkedPath(ids: bigint[]): string {
   const path = `/${ids.join('/')}/`;
   if (path.length > 512) {
-    throw BusinessException.validation([
-      { field: 'parentId', messages: ['部门层级路径超过 512 字符'] },
-    ]);
+    throw BusinessException.validation('部门层级路径超过 512 字符');
   }
   return path;
 }
@@ -84,10 +82,10 @@ export class DeptService {
 
   async create(body: CreateDeptDto, actor: AuthenticatedUser) {
     if (body.parentId !== undefined && body.parentId !== '0' && !isBigIntId(body.parentId)) {
-      throw BusinessException.validation([{ field: 'parentId', messages: ['父部门 ID 无效'] }]);
+      throw BusinessException.validation('父部门 ID 无效');
     }
     if (body.leaderId != null && !isBigIntId(body.leaderId)) {
-      throw BusinessException.validation([{ field: 'leaderId', messages: ['负责人 ID 无效'] }]);
+      throw BusinessException.validation('负责人 ID 无效');
     }
     // 父部门必须在当前范围内：否则会造出自己看不见的部门子树。
     if (!isDeptInScope(await loadDataScope(this.prisma, actor), body.parentId ?? '0')) {
@@ -107,9 +105,7 @@ export class DeptService {
             select: { userId: true },
           });
           if (!leader) {
-            throw BusinessException.validation([
-              { field: 'leaderId', messages: ['负责人必须是启用且未删除的用户'] },
-            ]);
+            throw BusinessException.validation('负责人必须是启用且未删除的用户');
           }
         }
         const created = await tx.dept.create({
@@ -137,10 +133,10 @@ export class DeptService {
 
   async update(id: bigint, body: UpdateDeptDto, actor: AuthenticatedUser) {
     if (body.parentId !== undefined && body.parentId !== '0' && !isBigIntId(body.parentId)) {
-      throw BusinessException.validation([{ field: 'parentId', messages: ['父部门 ID 无效'] }]);
+      throw BusinessException.validation('父部门 ID 无效');
     }
     if (body.leaderId != null && !isBigIntId(body.leaderId)) {
-      throw BusinessException.validation([{ field: 'leaderId', messages: ['负责人 ID 无效'] }]);
+      throw BusinessException.validation('负责人 ID 无效');
     }
     const deptId = id;
     const scope = await loadDataScope(this.prisma, actor);
@@ -161,9 +157,7 @@ export class DeptService {
             select: { userId: true },
           });
           if (!leader) {
-            throw BusinessException.validation([
-              { field: 'leaderId', messages: ['负责人必须是启用且未删除的用户'] },
-            ]);
+            throw BusinessException.validation('负责人必须是启用且未删除的用户');
           }
         }
         const paths = new Map<bigint, string>();
@@ -260,9 +254,7 @@ export class DeptService {
       seen.add(current);
       const node = byId.get(current);
       if (!node || node.status !== '0') {
-        throw BusinessException.validation([
-          { field: 'parentId', messages: ['父节点及其祖先必须存在且启用'] },
-        ]);
+        throw BusinessException.validation('父节点及其祖先必须存在且启用');
       }
       path.unshift(current);
       current = node.parentId;
