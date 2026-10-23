@@ -84,11 +84,6 @@ export class RoleQueryDto extends PageQueryDto {
   @ValidateIf((_object, value) => value !== undefined)
   @IsIn(['0', '1'])
   status?: string;
-
-  /** 排序白名单，缺省 createTime 降序。 */
-  @ValidateIf((_object, value) => value !== undefined)
-  @IsIn(['roleId', 'roleName', 'roleKey', 'orderNum', 'createTime'])
-  declare orderByColumn?: string;
 }
 
 export class AssignRoleMenusDto {

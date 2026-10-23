@@ -102,11 +102,6 @@ export class UserQueryDto extends PageQueryDto {
   @MaxLength(19)
   @Type(() => String)
   deptId?: string;
-
-  /** 排序白名单，缺省 createTime 降序。 */
-  @ValidateIf((_object, value) => value !== undefined)
-  @IsIn(['userId', 'userName', 'nickName', 'createTime'])
-  declare orderByColumn?: string;
 }
 
 export class AssignUserRolesDto {

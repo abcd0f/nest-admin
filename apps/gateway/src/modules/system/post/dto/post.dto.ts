@@ -80,11 +80,6 @@ export class PostQueryDto extends PageQueryDto {
   @MaxLength(19)
   @Type(() => String)
   deptId?: string;
-
-  /** 排序白名单，缺省 createTime 降序。 */
-  @ValidateIf((_object, value) => value !== undefined)
-  @IsIn(['postId', 'postCode', 'postName', 'orderNum', 'createTime'])
-  declare orderByColumn?: string;
 }
 
 /** 岗位下拉选择：只回传渲染选项需要的字段。 */
