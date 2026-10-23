@@ -103,11 +103,18 @@ export class PostService {
   }
 
   async create(body: CreatePostDto, actor: AuthenticatedUser) {
-    if (!isUserId(body.deptId))
+    if (body.deptId !== undefined && !isUserId(body.deptId))
       throw BusinessException.validation([{ field: 'deptId', messages: ['部门 ID 无效'] }]);
-    const deptId = BigInt(body.deptId);
+    // 表单不带部门时落到当前用户部门：前端岗位表单没有部门字段，左侧部门树只做筛选。
+    const target = body.deptId ?? actor.deptId;
+    if (target === null) {
+      throw BusinessException.validation([
+        { field: 'deptId', messages: ['当前用户没有所属部门，无法确定岗位归属'] },
+      ]);
+    }
+    const deptId = BigInt(target);
     // 岗位归属部门必须在当前范围内，否则创建者自己看不到这个岗位。
-    if (!isDeptInScope(await loadDataScope(this.prisma, actor), body.deptId)) {
+    if (!isDeptInScope(await loadDataScope(this.prisma, actor), target)) {
       throw new ForbiddenException('无权在目标部门创建岗位');
     }
     const row = await this.prisma.$transaction(

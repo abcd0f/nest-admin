@@ -15,12 +15,13 @@ import {
 } from 'class-validator';
 
 export class CreatePostDto {
-  /** 所属部门；岗位按部门划分，同名岗位可存在于不同部门。 */
+  /** 所属部门；岗位按部门划分，同名岗位可存在于不同部门。省略时落在当前用户所属部门。 */
+  @ValidateIf((_object, value) => value !== undefined)
   @IsString()
   @Matches(/^[1-9]\d{0,18}$/)
   @MaxLength(19)
   @Type(() => String)
-  deptId!: string;
+  deptId?: string;
 
   /** 岗位编码，未删除岗位内全局唯一。 */
   @IsString()
