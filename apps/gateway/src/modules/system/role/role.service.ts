@@ -4,11 +4,10 @@ import { AuthService } from '@app/auth';
 import { toDto, toPageDto } from '@app/common';
 import { BusinessException, isBigIntId } from '@app/core';
 import { paginate, PrismaService } from '@app/database';
+import { RESERVED_TENANT_ADMIN_ROLE_KEY, SUPER_ADMIN_ROLE_KEY } from '@app/permission';
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { DeptService } from '../dept/dept.service.js';
 import { MenuService } from '../menu/menu.service.js';
-import { revokeSessions, usersOfRole } from '../session-invalidation.js';
-import { assertRoleKeyAvailable, assertRoleKeyNotReserved } from '../super-admin.js';
 import {
   AssignRoleMenusDto,
   CreateRoleDto,
@@ -165,7 +164,7 @@ export class RoleService {
   }
 
   async create(body: CreateRoleDto, actor: AuthenticatedUser) {
-    assertRoleKeyAvailable(body.roleKey);
+    this.assertRoleKeyAvailable(body.roleKey);
     const row = await this.prisma.$transaction(
       async (tx) => {
         if (await tx.role.count({ where: { roleKey: body.roleKey, delFlag: '0' } })) {
@@ -201,8 +200,8 @@ export class RoleService {
         if (!role) throw new NotFoundException('角色不存在');
         // 保留标识既不能被改名，也不能被新值占用；仅在标识实际变化时判定。
         if (body.roleKey !== undefined && body.roleKey !== role.roleKey) {
-          assertRoleKeyNotReserved(role.roleKey);
-          assertRoleKeyAvailable(body.roleKey);
+          this.assertRoleKeyNotReserved(role.roleKey);
+          this.assertRoleKeyAvailable(body.roleKey);
         }
         if (
           body.roleKey !== undefined &&
@@ -232,7 +231,7 @@ export class RoleService {
     );
     // 状态或角色标识变更会影响该角色下所有用户的快照（含 @Role 兜底判定）。
     if (body.status !== undefined || body.roleKey !== undefined) {
-      await revokeSessions(this.auth, await usersOfRole(this.prisma, roleId));
+      await this.auth.revokeSessionsOf(await this.usersOfRole(roleId));
     }
     return toDto(RoleResponseDto, {
       ...row,
@@ -273,7 +272,7 @@ export class RoleService {
       { isolationLevel: 'Serializable' },
     );
     // 菜单集合变了，该角色下所有用户的快照作废。
-    await revokeSessions(this.auth, await usersOfRole(this.prisma, roleId));
+    await this.auth.revokeSessionsOf(await this.usersOfRole(roleId));
     return toDto(RoleResponseDto, {
       ...row,
       menuIds: row.menus.map((menu) => menu.menuId),
@@ -348,5 +347,32 @@ export class RoleService {
       },
       { isolationLevel: 'Serializable' },
     );
+  }
+
+  /** 角色下的全部用户；角色菜单、状态或标识变更后需要让这些用户重新登录。 */
+  private async usersOfRole(roleId: bigint): Promise<bigint[]> {
+    const rows = await this.prisma.userRole.findMany({
+      where: { roleId },
+      select: { userId: true },
+    });
+    return rows.map((row) => row.userId);
+  }
+
+  /**
+   * 系统内置角色标识不允许被新建占用。
+   *
+   * 本项目的超管由 `userId == 1` 判定、不依赖角色行，因此不移植 Java 的租户管理员特例。
+   */
+  private assertRoleKeyAvailable(roleKey: string): void {
+    if (roleKey === SUPER_ADMIN_ROLE_KEY || roleKey === RESERVED_TENANT_ADMIN_ROLE_KEY) {
+      throw new ConflictException('不允许使用系统内置管理员角色标识符');
+    }
+  }
+
+  /** 修改角色时，原标识已是保留标识的也不允许改名。 */
+  private assertRoleKeyNotReserved(roleKey: string): void {
+    if (roleKey === SUPER_ADMIN_ROLE_KEY || roleKey === RESERVED_TENANT_ADMIN_ROLE_KEY) {
+      throw new ConflictException('不允许修改系统内置管理员角色标识符');
+    }
   }
 }

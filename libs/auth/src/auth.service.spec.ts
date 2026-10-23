@@ -201,4 +201,14 @@ describe('jWT 与会话认证', () => {
     expect(await auth.revokeUserSessions('7')).toBe(2);
     expect(sessions.revokeUser).toHaveBeenCalledExactlyOnceWith('7');
   });
+
+  it('批量撤销按用户去重，单个用户失败不中断其余用户', async () => {
+    const { auth, sessions } = fixture();
+    sessions.revokeUser.mockRejectedValueOnce(new Error('redis 不可用'));
+
+    await expect(auth.revokeSessionsOf([7n, 7n, 8n])).resolves.toBeUndefined();
+
+    // 7 去重后只撤销一次（这次故意失败），8 仍会被撤销。
+    expect(sessions.revokeUser.mock.calls).toEqual([['7'], ['8']]);
+  });
 });

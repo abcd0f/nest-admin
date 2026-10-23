@@ -5,7 +5,6 @@ import { toDto, toDtoList, toTree } from '@app/common';
 import { BusinessException, isBigIntId } from '@app/core';
 import { PrismaService } from '@app/database';
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { revokeSessions, usersOfMenu } from '../session-invalidation.js';
 import { CreateMenuDto, MenuResponseDto, MenuTreeDto, UpdateMenuDto } from './dto/menu.dto.js';
 
 const menuSelect = {
@@ -162,7 +161,7 @@ export class MenuService {
     );
     // 菜单状态或权限码变了，引用它的角色下所有用户的快照作废。
     if (body.status !== undefined || body.perms !== undefined) {
-      await revokeSessions(this.auth, await usersOfMenu(this.prisma, menuId));
+      await this.auth.revokeSessionsOf(await this.usersOfMenu(menuId));
     }
     return toDto(MenuResponseDto, row)!;
   }
@@ -201,5 +200,16 @@ export class MenuService {
       }
       current = node.parentId;
     }
+  }
+
+  /** 引用某个菜单的全部用户（菜单 → 角色 → 用户）。 */
+  private async usersOfMenu(menuId: bigint): Promise<bigint[]> {
+    const roles = await this.prisma.roleMenu.findMany({ where: { menuId }, select: { roleId: true } });
+    if (!roles.length) return [];
+    const rows = await this.prisma.userRole.findMany({
+      where: { roleId: { in: roles.map((row) => row.roleId) } },
+      select: { userId: true },
+    });
+    return rows.map((row) => row.userId);
   }
 }

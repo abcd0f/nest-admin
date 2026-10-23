@@ -5,7 +5,7 @@ import { toDto, toPageDto } from '@app/common';
 import { BusinessException, isBigIntId } from '@app/core';
 import { PasswordHashService } from '@app/crypto';
 import { paginate, PrismaService } from '@app/database';
-import { isDeptInScope, loadDataScope, withDataScope } from '@app/permission';
+import { isDeptInScope, isSuperAdmin, loadDataScope, withDataScope } from '@app/permission';
 import {
   ConflictException,
   ForbiddenException,
@@ -13,8 +13,6 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { revokeSessions } from '../session-invalidation.js';
-import { assertNotSuperAdmin } from '../super-admin.js';
 import {
   AssignUserRolesDto,
   CreateUserDto,
@@ -162,7 +160,7 @@ export class UserService {
   }
 
   async update(id: bigint, body: UpdateUserDto, actor: AuthenticatedUser) {
-    assertNotSuperAdmin(id);
+    this.assertNotSuperAdmin(id);
     if (body.deptId != null && !isBigIntId(body.deptId)) {
       throw BusinessException.validation('部门 ID 无效');
     }
@@ -228,7 +226,7 @@ export class UserService {
       { isolationLevel: 'Serializable' },
     );
     // 状态变更后旧会话里的权限快照不再可信，撤销该用户全部设备会话。
-    if (body.status !== undefined) await revokeSessions(this.auth, [userId]);
+    if (body.status !== undefined) await this.auth.revokeSessionsOf([userId]);
     return toDto(UserResponseDto, {
       ...row,
       roleIds: row.roles.map((role) => role.roleId),
@@ -237,7 +235,7 @@ export class UserService {
   }
 
   async assignRoles(id: bigint, body: AssignUserRolesDto, actor: AuthenticatedUser) {
-    assertNotSuperAdmin(id);
+    this.assertNotSuperAdmin(id);
     if (body.roleIds.some((roleId) => !isBigIntId(roleId))) {
       throw BusinessException.validation('角色 ID 无效');
     }
@@ -270,7 +268,7 @@ export class UserService {
       { isolationLevel: 'Serializable' },
     );
     // 角色集合变了，快照必须作废；用户下次登录才会拿到新权限。
-    await revokeSessions(this.auth, [userId]);
+    await this.auth.revokeSessionsOf([userId]);
     return toDto(UserResponseDto, {
       ...row,
       roleIds: row.roles.map((role) => role.roleId),
@@ -279,7 +277,7 @@ export class UserService {
   }
 
   async remove(id: bigint, actor: AuthenticatedUser): Promise<void> {
-    assertNotSuperAdmin(id);
+    this.assertNotSuperAdmin(id);
     const userId = id;
     const scope = await loadDataScope(this.prisma, actor);
     await this.prisma.$transaction(
@@ -303,7 +301,7 @@ export class UserService {
       { isolationLevel: 'Serializable' },
     );
     // 用户已逻辑删除，残留会话必须立即失效。
-    await revokeSessions(this.auth, [userId]);
+    await this.auth.revokeSessionsOf([userId]);
   }
 
   /**
@@ -332,5 +330,18 @@ export class UserService {
       await tx.userPost.createMany({ data: ids.map((postId) => ({ userId, postId })) });
     }
     return ids.map(String);
+  }
+
+  /**
+   * 超级管理员账号不允许被任何人修改、停用、改角色或删除。
+   *
+   * 这也是"系统不会被锁死"的唯一保证——超管不可操作，所以永远有人能管系统。
+   * 入参是已由全局 `BigIntIdPipe` 转换过的 `bigint`，这里再转回字符串与常量比较，
+   * 避免 19 位 ID 在比较时经过 `Number`。
+   */
+  private assertNotSuperAdmin(userId: bigint): void {
+    if (isSuperAdmin(String(userId))) {
+      throw new ConflictException('不允许操作超级管理员用户');
+    }
   }
 }

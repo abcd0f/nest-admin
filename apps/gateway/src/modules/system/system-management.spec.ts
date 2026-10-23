@@ -25,8 +25,8 @@ const actor: AuthenticatedUser = {
   // 全部数据范围：既有用例的 where 断言保持原样，范围行为在 data-scope.spec.ts 单独覆盖。
   dataScopes: [{ roleId: '2', dataScope: '1', deptIds: [] }],
 };
-/** 会话撤销桩：影响权限的写操作提交后会按用户踢人。 */
-const auth = { revokeUserSessions: vi.fn().mockResolvedValue(1) };
+/** 会话撤销桩：影响权限的写操作提交后会按用户批量踢人。 */
+const auth = { revokeSessionsOf: vi.fn().mockResolvedValue(undefined) };
 /** 角色回显要返回完整菜单树/部门树，这里只关心被调用，不关心树内容。 */
 const menuService = { findAll: vi.fn().mockResolvedValue([]) };
 const deptService = { findAll: vi.fn().mockResolvedValue([]) };
@@ -304,7 +304,7 @@ describe('权限变更后的会话失效', () => {
       $transaction,
       userRole: { findMany: vi.fn().mockResolvedValue([{ userId: 2n }, { userId: 3n }]) },
     };
-    auth.revokeUserSessions.mockClear();
+    auth.revokeSessionsOf.mockClear();
     const service = new RoleService(prisma as never, auth as never, menuService as never, deptService as never);
     await expect(service.assignMenus(2n, { menuIds: [] }, actor)).resolves.toMatchObject({
       roleId: '2',
@@ -312,7 +312,7 @@ describe('权限变更后的会话失效', () => {
     expect(tx.roleMenu.deleteMany).toHaveBeenCalledOnce();
     expect($transaction.mock.lastCall?.[1]).toEqual({ isolationLevel: 'Serializable' });
     // 菜单集合变了，该角色下所有用户的快照作废。
-    expect(auth.revokeUserSessions.mock.calls).toEqual([['2'], ['3']]);
+    expect(auth.revokeSessionsOf.mock.calls).toEqual([[[2n, 3n]]]);
   });
 
   it('停用用户后撤销该用户的会话，不影响事务提交', async () => {
@@ -326,13 +326,13 @@ describe('权限变更后的会话失效', () => {
     const $transaction = vi.fn((action: (client: never) => Promise<unknown>, _options?: unknown) =>
       action(tx as never),
     );
-    auth.revokeUserSessions.mockClear();
+    auth.revokeSessionsOf.mockClear();
     const service = new UserService({ $transaction } as never, {} as never, auth as never);
     await expect(service.update(8n, { status: '1' }, actor)).resolves.toMatchObject({
       userId: '8',
     });
     expect(tx.user.update).toHaveBeenCalledOnce();
-    expect(auth.revokeUserSessions.mock.calls).toEqual([['8']]);
+    expect(auth.revokeSessionsOf.mock.calls).toEqual([[[8n]]]);
   });
 });
 
@@ -554,6 +554,27 @@ describe('角色和菜单管理服务', () => {
       );
     }
     expect(tx.role.update).not.toHaveBeenCalled();
+  });
+
+  it('普通角色标识放行，不误杀大小写与前后缀变体', async () => {
+    const tx = {
+      role: {
+        count: vi.fn().mockResolvedValue(0),
+        create: vi.fn().mockResolvedValue(roleRow()),
+      },
+    };
+    const service = new RoleService(
+      { $transaction: transaction(tx) } as never,
+      auth as never,
+      menuService as never,
+      deptService as never,
+    );
+    for (const roleKey of ['operator', 'SuperAdmin', 'admin2', 'superadmin ']) {
+      await expect(
+        service.create({ roleName: 'plain', roleKey } as never, actor),
+      ).resolves.toMatchObject({ roleId: '2' });
+    }
+    expect(tx.role.create).toHaveBeenCalledTimes(4);
   });
 
   it('角色回显按联动开关裁剪父节点：true 只留末级，false 返回全部已选', async () => {

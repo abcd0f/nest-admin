@@ -16,6 +16,7 @@ import { PrismaService } from '@app/database';
 import {
   Inject,
   Injectable,
+  Logger,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -24,6 +25,8 @@ import { SessionStore } from './session.store.js';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @Inject(JwtService) private readonly jwt: JwtService,
     @Inject(authConfig.KEY) private readonly config: AuthConfig,
@@ -206,5 +209,21 @@ export class AuthService {
    */
   async revokeUserSessions(userId: string): Promise<number> {
     return this.sessions.revokeUser(userId);
+  }
+
+  /**
+   * 批量撤销多个用户的全部会话，去重后逐个执行。
+   *
+   * 调用方的事务已经提交，踢人失败不能回滚数据，也不该让调用方看到 500 后重试；
+   * 因此只记录告警。残留会话会在下次权限校验时继续使用旧快照，直到过期或再次被撤销。
+   */
+  async revokeSessionsOf(userIds: Iterable<bigint>): Promise<void> {
+    for (const userId of new Set(userIds)) {
+      try {
+        await this.revokeUserSessions(String(userId));
+      } catch {
+        this.logger.warn(`撤销用户 ${String(userId)} 的会话失败，旧权限可能继续生效直到会话过期`);
+      }
+    }
   }
 }
